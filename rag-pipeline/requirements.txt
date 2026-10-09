@@ -1,0 +1,4 @@
+docling
+pymupdf4llm
+tiktoken
+python-dotenv
