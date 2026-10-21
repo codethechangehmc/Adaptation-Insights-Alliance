@@ -37,19 +37,29 @@ import postprocess  # noqa: E402  (sits next to parse.py)
 _converter = None
 
 
+# Recorded in meta.json. A paper parsed with different options is re-parsed on the next normal run.
+DOCLING_OPTIONS = {"heading_hierarchy": True}
+
+
 def get_converter():
     """Build the converter once (model loading is slow); import lazily."""
     global _converter
     if _converter is None:
-        from docling.document_converter import DocumentConverter
-        _converter = DocumentConverter()
+        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.pipeline_options import HeadingHierarchyOptions, PdfPipelineOptions
+        from docling.document_converter import DocumentConverter, PdfFormatOption
+        opts = PdfPipelineOptions(
+            generate_parsed_pages=True,        # style-based levels need the parsed cells (font size/weight)
+            heading_hierarchy_options=HeadingHierarchyOptions(enabled=True),   # bookmarks -> numbering -> font style
+        )
+        _converter = DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)})
     return _converter
 
 
-def render_outputs(out: Path) -> tuple[list, dict]:
+def render_outputs(out: Path, pdf_path: Path | None = None) -> tuple[list, dict]:
     """docling.json -> clean.md + sections.json. Pure function of the saved JSON, so it is cheap to rerun."""
     doc = json.loads((out / "docling.json").read_text(encoding="utf-8"))
-    clean_md, sections, stats = postprocess.process(doc)
+    clean_md, sections, stats = postprocess.process(doc, pdf_path)
     (out / "clean.md").write_text(clean_md, encoding="utf-8")
     (out / "sections.json").write_text(
         json.dumps({"sections": sections}, indent=4, ensure_ascii=False), encoding="utf-8")
@@ -60,9 +70,10 @@ def reprocess(out_root: Path, only: str | None) -> None:
     for d in sorted(p for p in out_root.iterdir() if (p / "docling.json").exists()):
         if only and d.name != only:
             continue
-        sections, stats = render_outputs(d)
         meta_path = d / "meta.json"
         meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+        pdf = PDF_DIR / meta.get("source_file", d.name + ".pdf")
+        sections, stats = render_outputs(d, pdf if pdf.exists() else None)
         meta.update({"n_sections": len(sections), "fixes": stats})
         meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
         print(f"reprocessed: {d.name}")
@@ -74,10 +85,10 @@ def process_pdf(pdf: Path, out_root: Path, pages: tuple[int, int] | None, force:
     meta_path = out / "meta.json"
     wanted_pages = list(pages) if pages else None
     if meta_path.exists() and not force:
-        done_pages = json.loads(meta_path.read_text(encoding="utf-8")).get("page_range")
-        if done_pages == wanted_pages:
+        done = json.loads(meta_path.read_text(encoding="utf-8"))
+        if done.get("page_range") == wanted_pages and done.get("docling_options") == DOCLING_OPTIONS:
             return "skipped"
-        # earlier run covered different pages (e.g. a test slice, now a full parse) -> redo
+        # earlier run covered different pages (a test slice, now a full parse) or used other Docling options -> redo
 
     out.mkdir(parents=True, exist_ok=True)
     start = time.time()
@@ -89,12 +100,13 @@ def process_pdf(pdf: Path, out_root: Path, pages: tuple[int, int] | None, force:
     raw_md = doc.export_to_markdown()
     (out / "raw.md").write_text(raw_md, encoding="utf-8")
 
-    sections, stats = render_outputs(out)
+    sections, stats = render_outputs(out, pdf)
 
     meta_path.write_text(json.dumps({
         "paper_id": pid,
         "source_file": pdf.name,
         "parser": "docling",
+        "docling_options": DOCLING_OPTIONS,
         "page_range": wanted_pages,
         "seconds": round(time.time() - start, 1),
         "n_sections": len(sections),

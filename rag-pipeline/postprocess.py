@@ -15,6 +15,7 @@ Reading your docling.json showed that most of the table problems are export prob
 This module only uses plain dicts (json.load of docling.json), so it needs no Docling install and can be
 re-run in seconds on saved files (see `python parse.py --reprocess`).
 """
+import difflib
 import re
 from collections import Counter
 
@@ -129,6 +130,14 @@ def render_text(doc: dict, item: dict, stats: Counter):
     if is_margin_stamp(doc, item):
         stats["margin_text_dropped"] += 1
         return None
+    if label in ("title", "section_header") and len(text) > MAX_HEADING_CHARS:
+        # e.g. an acronym list read as one giant heading. Keep the words as ordinary text (so they still
+        # reach sections.json and the chunker) and record it so a human can look at the page.
+        prov = item.get("prov") or []
+        stats["headings_demoted_long"] += 1
+        stats.setdefault("demoted_heading_list", []).append(
+            {"page": prov[0]["page_no"] if prov else None, "chars": len(text), "preview": text[:80]})
+        return ("text", 0, text)
     if label == "title":
         return ("heading", 1, text)
     if label == "section_header":
@@ -147,6 +156,7 @@ def render_text(doc: dict, item: dict, stats: Counter):
 # --------------------------------------------------------------------------
 # A footnote starts with a marker: a number ("1 There were..."), a symbol, or "(a)".
 FOOTNOTE_MARKER_RE = re.compile(r"^\s*(\d{1,3}|[*†‡§¶#]+|\(\w{1,3}\)|\[\w{1,3}\])(\s|[.):])")
+MAX_HEADING_CHARS = 200   # a real heading is a short line; anything longer is body text the layout model mislabelled
 CONTINUATION_GAP = 0.5   # a line starting less than 0.5 line-heights below the previous one is the same footnote
 
 
@@ -448,9 +458,148 @@ def build_and_render_table(doc: dict, chain: list) -> dict:
 
 
 # --------------------------------------------------------------------------
+# Rebuilding a table row-by-row from the PDF when Docling stopped seeing the table
+# --------------------------------------------------------------------------
+COL_TOL_PT = 3          # a word starting within this much left of a column's left edge still belongs to that column
+REBUILD_MIN_MATCH = 0.9  # rebuilt text must match what Docling read, or the region was wrong -> don't use it
+REBUILD_MIN_ROWS = 3
+
+
+def pdf_words(pdf_path, page_no: int, region: dict, page_h: float):
+    """
+    Words from the PDF's own text layer that sit inside `region` (a Docling bbox), as a list of lines,
+    each line a list of (left, bottom, right, top, text) sorted left to right. Coordinates are PDF points,
+    origin bottom-left, the same as Docling's. Uses pypdfium2, which Docling already installs.
+    """
+    import pypdfium2 as pdfium
+    pdf = pdfium.PdfDocument(str(pdf_path))
+    try:
+        tp = pdf[page_no - 1].get_textpage()
+        top, bottom = y_range(region, page_h)
+        left, right = region["l"], region["r"]
+        chars, space_before = [], False
+        for i in range(tp.count_chars()):
+            ch = tp.get_text_range(i, 1)
+            if not ch.strip():
+                space_before = True      # a space has no usable position in the PDF, so remember it by order
+                continue
+            l, b, r, t = tp.get_charbox(i)
+            cx, cy = (l + r) / 2, (b + t) / 2
+            if left - 2 <= cx <= right + 2 and bottom - 2 <= cy <= top + 2:
+                chars.append((ch, l, b, r, t, space_before))
+            space_before = False
+    finally:
+        pdf.close()
+    if not chars:
+        return []
+    heights = sorted(t - b for ch, l, b, r, t, sp in chars if t > b)
+    h = heights[len(heights) // 2] if heights else 10.0
+    # group characters into lines by vertical centre (top of the page first)
+    lines = []
+    for c in sorted(chars, key=lambda c: -(c[2] + c[4]) / 2):
+        cy = (c[2] + c[4]) / 2
+        if lines and abs(lines[-1]["cy"] - cy) < 0.5 * h:
+            lines[-1]["chars"].append(c)
+            lines[-1]["cy"] = (lines[-1]["cy"] * (len(lines[-1]["chars"]) - 1) + cy) / len(lines[-1]["chars"])
+        else:
+            lines.append({"cy": cy, "chars": [c]})
+    out = []
+    for ln in lines:
+        words, cur, prev_r = [], [], None
+        for ch, l, b, r, t, sp in sorted(ln["chars"], key=lambda c: c[1]):
+            if cur and (sp or (prev_r is not None and l - prev_r > 0.8 * h)):   # a space, or a big gap without one
+                words.append(cur)
+                cur = []
+            cur.append((ch, l, b, r, t))
+            prev_r = r
+        if cur:
+            words.append(cur)
+        out.append([(min(c[1] for c in w), min(c[2] for c in w), max(c[3] for c in w), max(c[4] for c in w),
+                     "".join(c[0] for c in w)) for w in words])
+    return out
+
+
+def rebuild_continuation(doc: dict, prev: dict, item: dict, text: str, pdf_path):
+    """
+    A table ends at the bottom of one page and Docling reads the next page's rows as one giant heading
+    or paragraph. If `item` (that text) sits at the top of the next page, re-read the page's words from the
+    PDF, split them into columns at the same x-positions as `prev`'s columns, and return a table item with
+    those rows. Returns (table_item, None) or (None, reason). Never guesses: any mismatch -> (None, reason).
+    """
+    if not pdf_path:
+        return None, "PDF not available"
+    prov = (item.get("prov") or [None])[0]
+    p_last = prev["prov"][-1]
+    if not prov or prov["page_no"] != p_last["page_no"] + 1:
+        return None, "not on the page after the table"
+    prev_h = page_size(doc, p_last["page_no"])[1]
+    next_h = page_size(doc, prov["page_no"])[1]
+    if not (next_h - y_range(prov["bbox"], next_h)[0] < TOP_ZONE_PT and lowest_y(doc, prev) < prev_h * BOTTOM_ZONE_FRAC):
+        return None, "table does not reach the page bottom / text does not start at the next page top"
+
+    # where each column of the previous table starts (left edge of its leftmost text)
+    left_by_col: dict = {}
+    for c in prev["data"]["table_cells"]:
+        if c.get("bbox") and c.get("text", "").strip() and c["end_col_offset_idx"] - c["start_col_offset_idx"] == 1:
+            col = c["start_col_offset_idx"]
+            left_by_col[col] = min(left_by_col.get(col, 1e9), c["bbox"]["l"])
+    n_cols = prev["data"]["num_cols"]
+    if n_cols < 2 or len(left_by_col) != n_cols:
+        return None, "could not find every column's position in the table above"
+    starts = [left_by_col[k] for k in range(n_cols)]
+
+    try:
+        lines = pdf_words(pdf_path, prov["page_no"], prov["bbox"], next_h)
+    except Exception as e:                           # missing pypdfium2, unreadable PDF, ...
+        return None, f"could not read the PDF ({type(e).__name__})"
+    if not lines:
+        return None, "no text found in the PDF at that spot"
+
+    rows = []                                        # each row: [ [words] per column ], plus cell boxes
+    for words in lines:
+        cols = [[] for _ in range(n_cols)]
+        for w in words:
+            k = max((k for k in range(n_cols) if starts[k] <= w[0] + COL_TOL_PT), default=0)
+            cols[k].append(w)
+        if cols[0]:
+            rows.append(cols)
+        elif rows:                                   # wrapped line: no first-column text -> belongs to the row above
+            for k in range(n_cols):
+                rows[-1][k].extend(cols[k])
+        else:
+            return None, "text starts mid-row (a row wraps over the page break)"
+    if len(rows) < REBUILD_MIN_ROWS:
+        return None, f"only {len(rows)} rows found"
+
+    cells = []
+    for r, cols in enumerate(rows):
+        for k, ws in enumerate(cols):
+            if not ws:
+                continue
+            cells.append({"start_row_offset_idx": r, "end_row_offset_idx": r + 1,
+                          "start_col_offset_idx": k, "end_col_offset_idx": k + 1,
+                          "text": " ".join(w[4] for w in ws), "column_header": False,
+                          "bbox": {"l": min(w[0] for w in ws), "b": min(w[1] for w in ws),
+                                   "r": max(w[2] for w in ws), "t": max(w[3] for w in ws),
+                                   "coord_origin": "BOTTOMLEFT"}})
+    sparse = sum(1 for cols in rows if not any(cols[1:])) / len(rows)
+    if sparse > 0.3:
+        return None, "many rows have nothing after the first column"
+
+    norm = lambda s: re.sub(r"\W", "", clean_text(s)).lower()
+    a, b = norm(" ".join(c["text"] for c in cells)), norm(text)
+    if difflib.SequenceMatcher(None, a, b, autojunk=False).ratio() < REBUILD_MIN_MATCH:
+        return None, "rebuilt text does not match what Docling read"
+
+    item2 = {"label": "table", "footnotes": [], "prov": [{"page_no": prov["page_no"], "bbox": prov["bbox"]}],
+             "data": {"num_rows": len(rows), "num_cols": n_cols, "table_cells": cells}}
+    return item2, None
+
+
+# --------------------------------------------------------------------------
 # Whole document -> blocks -> markdown / sections
 # --------------------------------------------------------------------------
-def render_document(doc: dict, stats: Counter) -> list:
+def render_document(doc: dict, stats: Counter, pdf_path=None) -> list:
     """
     Return blocks in reading order: {"kind": "heading"|"text"|"table", "text", "level", "pages": (first, last)}.
     A table is only merged with the previous table if NOTHING visible sits between them. Furniture and
@@ -474,6 +623,17 @@ def render_document(doc: dict, stats: Counter) -> list:
             r = render_text(doc, item, stats)
             if r is None:
                 continue
+            if chain and r[0] == "text" and item.get("label") in ("title", "section_header"):
+                # a long heading was just demoted. If it sits right under a table that ran to the bottom of the
+                # previous page, it is probably that table's next rows: try to rebuild them from the PDF.
+                synth, why = rebuild_continuation(doc, chain[-1], item, r[2], pdf_path)
+                note = stats["demoted_heading_list"][-1]
+                if synth:
+                    chain.append(synth)
+                    stats["demoted_headings_rebuilt_as_rows"] += 1
+                    note["rebuilt_rows"] = synth["data"]["num_rows"]
+                    continue
+                note["not_rebuilt"] = why
             flush()
             prov = item.get("prov") or []
             page = prov[0]["page_no"] if prov else None
@@ -562,10 +722,10 @@ def to_sections(blocks: list, stats: Counter) -> list:
     return kept
 
 
-def process(doc: dict):
-    """docling.json dict -> (clean_markdown, sections, stats)."""
+def process(doc: dict, pdf_path=None):
+    """docling.json dict (+ the source PDF, if available, for rebuilding rows) -> (clean_markdown, sections, stats)."""
     stats: Counter = Counter()
-    blocks = render_document(doc, stats)
+    blocks = render_document(doc, stats, pdf_path)
     sections = to_sections(blocks, stats)
     out_stats = dict(stats)
     review = [{"pages": list(b["pages"]), "title": b["title"], "reasons": b["suspect"]}
@@ -573,4 +733,5 @@ def process(doc: dict):
     out_stats.setdefault("suspect_tables", 0)         # always present, so review.py can tell "none" from "old run"
     if review:
         out_stats["suspect_table_list"] = review      # tables a human should check against the PDF
+    out_stats.setdefault("headings_demoted_long", 0)  # always present, like suspect_tables (0 = nothing demoted)
     return to_markdown(blocks), sections, out_stats

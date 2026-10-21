@@ -7,7 +7,8 @@ Run from rag-pipeline/:
     python review.py --csv review.csv     # also write a sheet with blank verdict/notes columns to fill in
 
 Where the flags come from: postprocess.py checks each table's cell geometry and writes the suspects to
-data/parsed/<paper>/meta.json under fixes -> suspect_table_list. This script only READS those files, so
+data/parsed/<paper>/meta.json under fixes -> suspect_table_list. It also lists headings over 200 characters
+that it turned into plain text (fixes -> demoted_heading_list): usually a list the layout model mistook for a heading. This script only READS those files, so
 it is safe to run any time and needs no Docling.
 
 Page numbers are the PDF's physical pages (page 1 = first page of the file), NOT the numbers printed on
@@ -43,7 +44,8 @@ def load(only):
         fixes = meta.get("fixes", {})
         # postprocess.py always writes suspect_tables (0 if none). Missing key = older version of the cleanup.
         flags = fixes.get("suspect_table_list", []) if "suspect_tables" in fixes else None
-        papers.append((pid, meta.get("source_file", pid + ".pdf"), fixes.get("tables"), flags))
+        papers.append((pid, meta.get("source_file", pid + ".pdf"), fixes.get("tables"), flags,
+                       fixes.get("demoted_heading_list", [])))
     return papers
 
 
@@ -64,8 +66,16 @@ def main() -> None:
         print("No meta.json files found under data/parsed. Run parse.py first.")
         return
 
-    sheet, total_flags, stale = [], 0, []
-    for pid, pdf, n_tables, flags in papers:
+    sheet, total_flags, total_demoted, stale = [], 0, 0, []
+    for pid, pdf, n_tables, flags, demoted in papers:
+        for d in demoted:
+            total_demoted += 1
+            if d.get("rebuilt_rows"):
+                what = f"rebuilt as {d['rebuilt_rows']} table rows from the PDF and joined to the table above"
+            else:
+                what = "demoted to plain text (" + d.get("not_rebuilt", "not under a table") + ")"
+            print(f"{pid}: PDF page {d['page']}  |  {d['chars']}-char heading {what}: \"{d['preview']}...\"")
+            sheet.append([pid, pdf, d["page"], d["page"], "(long heading)", f"{what}: {d['preview']}", "", ""])
         if flags is None:
             stale.append(pid)
             print(f"{pid}: no flag info (processed before flagging existed). Run: python parse.py --reprocess\n")
@@ -81,7 +91,7 @@ def main() -> None:
                 sheet.append([pid, pdf, f["pages"][0], f["pages"][1], f.get("title") or "", r, "", ""])
         print()
 
-    print(f"=== {len(papers)} papers, {total_flags} flagged tables"
+    print(f"=== {len(papers)} papers, {total_flags} flagged tables, {total_demoted} long headings handled"
           + (f", {len(stale)} need --reprocess" if stale else "") + " ===")
 
     if args.csv:
