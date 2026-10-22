@@ -26,7 +26,7 @@ class AdaptationFundTests(unittest.TestCase):
         """Numbered pages account for the exact reported total."""
         final = copy.deepcopy(self.page["results"][0])
         final["id"] = "AF.family.last.0"
-        client = Mock()
+        client = Mock(workers=1)
         client.get_json.side_effect = [self.page, {"total_size": 3, "results": [final]}]
         result = cpr.list_families(client, "agent::Adaptation Fund")
         self.assertEqual(len(result.records), 3)
@@ -35,7 +35,7 @@ class AdaptationFundTests(unittest.TestCase):
 
     def test_capped_or_repeated_page_is_incomplete(self) -> None:
         """An endpoint repeating its first page cannot appear complete."""
-        client = Mock()
+        client = Mock(workers=1)
         client.get_json.side_effect = [self.page, self.page]
         self.assertIn("repeated", cpr.list_families(client, "fund").error)
 
@@ -57,7 +57,7 @@ class AdaptationFundTests(unittest.TestCase):
                 {"type": "region", "value": {"value": "Middle East & North Africa"}},
             ],
         }
-        client = Mock()
+        client = Mock(workers=1)
         client.get_json.side_effect = [{"total_size": 1, "results": [hit]}, {"data": family}]
         result = cpr.run_search(client, "af", "agent::Adaptation Fund", "AF.")
         self.assertEqual(result.records[0]["country"], "Pakistan")
@@ -67,7 +67,7 @@ class AdaptationFundTests(unittest.TestCase):
     def test_gone_family_preserves_partial_evidence_and_marks_incomplete(self) -> None:
         """An indexed 410 family cannot erase retrieved documents or count as complete."""
         hits = [{"id": self.family["import_id"]}, {"id": "AF.family.gone.0"}]
-        client = Mock()
+        client = Mock(workers=1)
         client.get_json.side_effect = [
             {"total_size": 2, "results": hits},
             {"data": self.family},

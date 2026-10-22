@@ -46,7 +46,7 @@ python rag-pipeline/scraper/run.py worldbank
 # A small trial: search everything, download at most 5 files
 python rag-pipeline/scraper/run.py af --max-downloads 5
 
-# All sources, one after another
+# All sources at the same time
 python rag-pipeline/scraper/run_all.py
 
 # All sources, search only
@@ -98,8 +98,10 @@ The keyword and country lists are in `config/africa.json`.
 
 - **Complete or nothing.** If a site returns fewer results than it reports,
   the run stops and the previous catalogue stays as it was.
-- **Polite.** One request per second per site. Each site's robots.txt rules
-  are followed. If a site blocks access, the scraper stops; it never works
+- **Polite.** Half a second between requests to one site. The World Bank,
+  Climate Policy Radar and GEF file servers are built for automated traffic
+  and get a tenth of a second. A site's own robots.txt delay always wins:
+  AfDB asks for 10 seconds. Each site's robots.txt rules are followed. If a site blocks access, the scraper stops; it never works
   around a block.
 - **Nothing lost.** Records are never deleted. Each download is checked to
   be a real report, not an error page.

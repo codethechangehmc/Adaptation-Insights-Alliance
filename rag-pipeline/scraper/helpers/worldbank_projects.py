@@ -185,7 +185,7 @@ def run(args: argparse.Namespace, run_dir: Path) -> int:
     }
     try:
         ids = project_ids(catalogue)
-        client = Client(args.request_interval)
+        client = Client(args.request_interval, workers=args.workers)
         rows, failures = collect_projects(client, ids, args.workers)
         summary.update(expected=len(ids), retrieved=len(rows), failed_ids=failures)
         summary["not_found_ids"] = [

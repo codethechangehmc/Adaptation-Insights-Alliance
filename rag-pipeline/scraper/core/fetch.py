@@ -8,9 +8,12 @@ import random
 import re
 import threading
 import time
+from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+from typing import TypeVar
 from urllib.parse import urljoin, urlsplit
 
 import requests
@@ -24,6 +27,20 @@ RETRY_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 MAX_RETRY_AFTER_SECONDS = 300
 CHUNK_BYTES = 1024 * 1024
 MAX_REDIRECTS = 30
+DEFAULT_INTERVAL = 0.5
+# Hosts built for automated traffic, given a shorter interval than DEFAULT_INTERVAL.
+# Checked 2026-10-22: each sits behind a CDN (Cloudflare, CloudFront or Azure) and
+# its robots.txt sets no Crawl-delay. A robots Crawl-delay always wins over these.
+FAST_HOSTS = {
+    "search.worldbank.org": 0.1,  # World Bank search API
+    "documents.worldbank.org": 0.1,  # World Bank files
+    "documents1.worldbank.org": 0.1,  # World Bank file mirror
+    "api.climatepolicyradar.org": 0.1,  # Climate Policy Radar API (AF, GCF)
+    "cdn.climatepolicyradar.org": 0.1,  # Climate Policy Radar files
+    "publicpartnershipdata.azureedge.net": 0.1,  # GEF files
+}
+Item = TypeVar("Item")
+Result = TypeVar("Result")
 
 
 class RequestFailed(Exception):
@@ -45,13 +62,20 @@ class Client:
 
     def __init__(
         self,
-        request_interval: float = 1.0,
+        request_interval: float | None = None,
         attempts: int = 4,
         timeout: float = 60,
         headers: dict[str, str] | None = None,
+        workers: int = 1,
     ) -> None:
-        """Set the per-host interval, retry count, timeout and extra default headers."""
-        self.request_interval = request_interval
+        """Set the per-host interval, retry count, timeout, default headers and worker count.
+
+        Without request_interval, hosts wait DEFAULT_INTERVAL, or less for FAST_HOSTS.
+        A given request_interval applies to every host. workers caps run_parallel.
+        """
+        self.request_interval = DEFAULT_INTERVAL if request_interval is None else request_interval
+        self.host_intervals = FAST_HOSTS if request_interval is None else {}
+        self.workers = workers
         self.attempts = attempts
         self.timeout = timeout
         self.headers = {"User-Agent": USER_AGENT, **(headers or {})}
@@ -206,7 +230,8 @@ class Client:
                 ready_at = self._next_request.get(host, 0.0)
                 if now >= ready_at:
                     crawl_delay = self._robots.get(host, ([], 0.0))[1]
-                    self._next_request[host] = now + max(self.request_interval, crawl_delay)
+                    interval = self.host_intervals.get(host, self.request_interval)
+                    self._next_request[host] = now + max(interval, crawl_delay)
                     return
                 delay = ready_at - now
             time.sleep(delay)
@@ -261,6 +286,22 @@ class Client:
         with self._lock:
             self._blocked[host] = failure
         return failure
+
+
+def run_parallel(
+    client: Client, function: Callable[[Item], Result], items: Iterable[Item]
+) -> list[Result]:
+    """Call function on every item, up to client.workers at a time, keeping item order.
+
+    The per-host rate limit still applies; this only overlaps waiting for replies.
+    The first exception, in item order, is raised once every call has finished.
+    """
+    items = list(items)
+    workers = min(client.workers, len(items))
+    if workers <= 1:
+        return [function(item) for item in items]
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(function, items))
 
 
 def retry_after_seconds(value: str) -> float:

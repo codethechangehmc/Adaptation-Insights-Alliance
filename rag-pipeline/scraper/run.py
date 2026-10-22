@@ -20,9 +20,20 @@ HELPER_MODULES = {
 }
 COMMANDS = {**SOURCE_MODULES, **HELPER_MODULES}
 
-# run_all order: project details refresh right after the World Bank catalogue it reads.
-# GEF date recovery is left out: it needs downloaded files and optional PyMuPDF.
-BATCH_COMMANDS = ["worldbank", "worldbank_projects", "af", "afdb", "cif", "gcf", "gef", "ifad"]
+# run_all runs these lanes side by side; commands in one lane run in order. A lane keeps
+# together commands that depend on each other (project details read the World Bank
+# catalogue) or share a website (AF and GCF both use Climate Policy Radar), so that
+# website still gets one rate limit. GEF date recovery is left out: it needs
+# downloaded files and optional PyMuPDF.
+BATCH_LANES = [
+    ["worldbank", "worldbank_projects"],
+    ["af", "gcf"],
+    ["afdb"],
+    ["cif"],
+    ["gef"],
+    ["ifad"],
+]
+BATCH_COMMANDS = [command for lane in BATCH_LANES for command in lane]
 
 
 def main(argv: list[str] | None = None) -> int:

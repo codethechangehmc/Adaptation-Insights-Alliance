@@ -1,8 +1,10 @@
-"""Run every source in turn and log one status line each. One failure does not stop the rest.
+"""Run every source and log one status line each. One failure does not stop the rest.
 
 Usage:
     python rag-pipeline/scraper/run_all.py [--sources worldbank gef ...] [options]
 
+Sources run side by side in the lanes set in run.py; sources in one lane run in
+order. Each output line starts with its source name, for example [afdb].
 Other options, such as --metadata-only or --max-downloads 5, go to every source.
 Each source writes to its usual outputs/<source>/ and downloads/<source>/ folders.
 """
@@ -12,16 +14,20 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from run import BATCH_COMMANDS
+from run import BATCH_COMMANDS, BATCH_LANES
 
 REPO = Path(__file__).resolve().parents[2]
 SCRAPER_DIR = Path(__file__).resolve().parent
 LOG = logging.getLogger("run_all")
+PRINT_LOCK = threading.Lock()
 
 
 def latest_summary(source: str, output_dir: Path, started: float = 0) -> dict:
@@ -51,8 +57,53 @@ def status_line(source: str, exit_code: int, seconds: float, summary: dict) -> s
     return ", ".join(parts)
 
 
+def run_command(source: str, command: list[str]) -> int:
+    """Run one source in its own process, printing its output prefixed with its name."""
+    environment = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    with subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        encoding="utf-8",
+        errors="replace",
+        env=environment,
+    ) as child:
+        for line in child.stdout:
+            with PRINT_LOCK:
+                print(f"[{source}] {line.rstrip()}", flush=True)
+    return child.returncode
+
+
+def run_source(source: str, args: argparse.Namespace, passed_on: list[str]) -> tuple[int, str]:
+    """Run one source and return its exit code and status line."""
+    started = time.monotonic()
+    written_after = time.time()
+    folder = "worldbank" if source == "worldbank_projects" else source
+    output_dir = args.output_dir / folder
+    command = [
+        sys.executable,
+        str(SCRAPER_DIR / "run.py"),
+        source,
+        "--output-dir",
+        str(output_dir),
+        "--download-dir",
+        str(args.download_dir / folder),
+        *passed_on,
+    ]
+    exit_code = run_command(source, command)
+    summary = latest_summary(source, output_dir, written_after)
+    return exit_code, status_line(source, exit_code, time.monotonic() - started, summary)
+
+
+def run_lane(
+    lane: list[str], args: argparse.Namespace, passed_on: list[str]
+) -> dict[str, tuple[int, str]]:
+    """Run the sources of one lane in order."""
+    return {source: run_source(source, args, passed_on) for source in lane}
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Run the chosen sources one after another. Returns 1 if any source failed."""
+    """Run the chosen sources, lanes side by side. Returns 1 if any source failed."""
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -60,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
         "--sources",
         nargs="+",
         default=BATCH_COMMANDS,
-        help="sources to run, in order (default: every source)",
+        help="sources to run (default: every source)",
     )
     parser.add_argument(
         "--output-dir",
@@ -80,31 +131,19 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"Unknown sources: {', '.join(sorted(unknown))}")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 
-    # Run each source in its own process, so one crash cannot stop the others.
-    lines, failures = [], 0
-    for source in args.sources:
-        started = time.monotonic()
-        written_after = time.time()
-        folder = "worldbank" if source == "worldbank_projects" else source
-        output_dir = args.output_dir / folder
-        command = [
-            sys.executable,
-            str(SCRAPER_DIR / "run.py"),
-            source,
-            "--output-dir",
-            str(output_dir),
-            "--download-dir",
-            str(args.download_dir / folder),
-            *passed_on,
-        ]
-        exit_code = subprocess.run(command, check=False).returncode
-        failures += exit_code != 0
-        summary = latest_summary(source, output_dir, written_after)
-        lines.append(status_line(source, exit_code, time.monotonic() - started, summary))
+    # Each source runs in its own process, so one crash cannot stop the others.
+    lanes = [[source for source in lane if source in args.sources] for lane in BATCH_LANES]
+    lanes = [lane for lane in lanes if lane]
+    results: dict[str, tuple[int, str]] = {}
+    with ThreadPoolExecutor(max_workers=len(lanes)) as pool:
+        for lane_results in pool.map(lambda lane: run_lane(lane, args, passed_on), lanes):
+            results.update(lane_results)
 
-    for line in lines:
-        LOG.info("%s", line)
-    return 1 if failures else 0
+    # Report in batch order, whatever order the lanes finished in.
+    for source in BATCH_COMMANDS:
+        if source in results:
+            LOG.info("%s", results[source][1])
+    return 1 if any(exit_code for exit_code, _ in results.values()) else 0
 
 
 if __name__ == "__main__":

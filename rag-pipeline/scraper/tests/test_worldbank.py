@@ -27,6 +27,8 @@ def api_document(number: int, day: date) -> dict:
 class FakeAPI:
     """Answers World Bank API queries from a list of documents, like the real API."""
 
+    workers = 1
+
     def __init__(self, documents: list[dict], repeat_page: bool = False) -> None:
         """Hold the documents. With repeat_page, every offset returns the first page."""
         self.documents = documents

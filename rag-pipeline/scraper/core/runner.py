@@ -108,13 +108,16 @@ def parse_arguments(source: ModuleType, argv: list[str] | None) -> argparse.Name
         "--refresh", action="store_true", help="download again even if a checked copy exists"
     )
     parser.add_argument(
-        "--workers", type=int, default=4, help="searches or downloads in parallel (default: 4)"
+        "--workers",
+        type=int,
+        default=16,
+        help="requests in flight at once: searches, pages or downloads (default: 16)",
     )
     parser.add_argument(
         "--request-interval",
         type=float,
-        default=1.0,
-        help="seconds between requests to one host (default: 1.0)",
+        help="seconds between requests to one host, for every host "
+        "(default: 0.5, or 0.1 for the fast hosts in core/fetch.py)",
     )
     if hasattr(source, "add_arguments"):
         source.add_arguments(parser)
@@ -123,7 +126,7 @@ def parse_arguments(source: ModuleType, argv: list[str] | None) -> argparse.Name
     # Reject settings that cannot work before any request is made.
     if args.start_date > args.end_date:
         parser.error("--start-date is after --end-date")
-    if args.workers < 1 or args.request_interval < 0:
+    if args.workers < 1 or (args.request_interval or 0) < 0:
         parser.error("--workers must be at least 1 and --request-interval at least 0")
     if args.max_downloads is not None and args.max_downloads < 0:
         parser.error("--max-downloads must be 0 or more")
@@ -171,7 +174,9 @@ def run_steps(
 ) -> str:
     """Search, classify, save, download and report. Returns the run status."""
     # Run every search. Stop before touching state if any is incomplete.
-    client = Client(args.request_interval, headers=getattr(source, "HEADERS", None))
+    client = Client(
+        args.request_interval, headers=getattr(source, "HEADERS", None), workers=args.workers
+    )
     if hasattr(source, "prepare_run"):
         source.prepare_run(args)
     results = search_step(source, client, args, run_dir, summary)

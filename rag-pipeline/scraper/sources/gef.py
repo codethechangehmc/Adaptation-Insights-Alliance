@@ -24,7 +24,7 @@ from urllib.parse import unquote, urljoin, urlsplit
 from bs4 import BeautifulSoup
 
 from core import matching, storage
-from core.fetch import Client
+from core.fetch import Client, run_parallel
 from core.searching import SearchResult
 
 SOURCE = "gef"
@@ -224,13 +224,17 @@ def run_search(client: Client, search: dict) -> SearchResult:
     projects = list_projects(client, search)
     if projects.error:
         return SearchResult([], None, projects.pages, projects.error)
+    # Open the African and unknown-geography project pages in parallel.
+    selected = [
+        project
+        for project in projects.records
+        if matching.is_african(f"{project['country']} {project['project_title']}")
+        or unknown_geography(project["country"])
+    ]
+    pages = run_parallel(client, lambda project: client.get_html(project["web_url"]), selected)
     records = []
-    for project in projects.records:
-        text = f"{project['country']} {project['project_title']}"
-        if matching.is_african(text) or unknown_geography(project["country"]):
-            page = client.get_html(project["web_url"])
-            details = project_details(page, project)
-            records.extend(project_documents(page, details))
+    for project, page in zip(selected, pages, strict=True):
+        records.extend(project_documents(page, project_details(page, project)))
     notes = f"projects {len(projects.records)}/{projects.expected}; document links {len(records)}"
     return SearchResult(records, None, projects.pages, notes=notes)
 

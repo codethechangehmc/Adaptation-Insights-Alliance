@@ -40,9 +40,9 @@ across periodic runs. Combined datasets identify records by `(source, id)`.
 Generated data is git-ignored; test and audit runs belong under
 `rag-pipeline/data/<source>_review/`.
 
-Loose local validation material is grouped in `data/validation/scripts/`,
-`data/validation/reports/` and `data/validation/handoffs/`. These are ignored
-working files; source review folders retain their original evidence and state.
+Each review folder keeps its downloads, state, inclusion list and R comparison.
+The detailed evidence behind the [review report](audit/REVIEW.md) is in
+`data/validation/reports/20261022_review/`. All of `data/` is local and ignored.
 
 An incomplete search does not replace the previous catalogue. Downloads are
 checked and reused, failures are recorded for the next run, and `--refresh`

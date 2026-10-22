@@ -11,7 +11,7 @@ import json
 import re
 from urllib.parse import unquote
 
-from core.fetch import Client, RequestFailed
+from core.fetch import Client, RequestFailed, run_parallel
 from core.matching import find_keywords, is_african, parse_date
 from core.searching import SearchResult
 
@@ -163,21 +163,21 @@ def run_search(
     page_size: int = 100,
     regions: list[str] | None = None,
 ) -> SearchResult:
-    """List every filtered family, then fetch each family's documents."""
+    """List every filtered family, then fetch each family's documents in parallel."""
     families = list_families(client, agent, page_size, regions)
     if families.error:
         return families
+    if any(not family["id"].startswith(prefix) for family in families.records):
+        return SearchResult([], error="CPR fund filter returned another corpus")
 
+    # Fetch every detail first, then read them in listing order.
+    details = run_parallel(client, lambda family: family_detail(client, family), families.records)
     records = []
-    for family in families.records:
-        if not family["id"].startswith(prefix):
-            return SearchResult([], error="CPR fund filter returned another corpus")
-        try:
-            detail = client.get_json(API + "/families/" + family["id"])["data"]
-        except RequestFailed as error:
+    for family, detail in zip(families.records, details, strict=True):
+        if isinstance(detail, RequestFailed):
             # GCF FP221 is still listed but its detail returns 410 (checked 2026-10-22).
             notes = f"Stopped at {family['id']}; listing total {families.expected}"
-            return SearchResult(records, pages=families.pages, error=str(error), notes=notes)
+            return SearchResult(records, pages=families.pages, error=str(detail), notes=notes)
         rows = family_records(detail, source)
         if not rows:
             return SearchResult(records, error=f"No documents for {family['id']}")
@@ -187,6 +187,14 @@ def run_search(
         records.extend(rows)
     notes = f"Families expected/retrieved: {families.expected}/{len(families.records)}"
     return SearchResult(records, None, families.pages, notes=notes)
+
+
+def family_detail(client: Client, family: dict) -> dict | RequestFailed:
+    """Return one family's detail, or the failure so the caller can report where it stopped."""
+    try:
+        return client.get_json(API + "/families/" + family["id"])["data"]
+    except RequestFailed as error:
+        return error
 
 
 def place_labels(family: dict) -> dict:

@@ -33,6 +33,19 @@ class FetchTests(unittest.TestCase):
             self.assertIs(client.get("https://example.org/a"), ready)
         self.assertGreaterEqual(pauses[0], 2)
 
+    def test_host_intervals_and_crawl_delay(self) -> None:
+        """Fast hosts wait less by default, a given interval applies to all, Crawl-delay wins."""
+        client = Client()
+        client._robots.update({"slow.org": ([], 10.0)})
+        with patch.object(fetch.time, "monotonic", return_value=100.0):
+            for host in ["search.worldbank.org", "example.org", "slow.org"]:
+                client._wait_turn(host)
+        waits = {host: round(ready - 100.0, 3) for host, ready in client._next_request.items()}
+        self.assertEqual(
+            waits, {"search.worldbank.org": 0.1, "example.org": 0.5, "slow.org": 10.0}
+        )
+        self.assertEqual(Client(request_interval=2).host_intervals, {})
+
     def test_not_found_is_not_retried(self) -> None:
         """A 404 fails at once."""
         missing = response(404)

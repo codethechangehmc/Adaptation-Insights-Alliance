@@ -24,7 +24,7 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 from core import matching, storage
-from core.fetch import Client
+from core.fetch import Client, run_parallel
 from core.searching import SearchResult, combine_pieces
 
 SOURCE = "worldbank"
@@ -200,10 +200,13 @@ def split_by_date(client: Client, search: dict, total: int) -> SearchResult:
     # Halves share no day: [start, middle] and [middle + 1 day, end].
     middle = start + (end - start) // 2
     halves = [(start, middle), (middle + timedelta(days=1), end)]
-    pieces = []
-    for low, high in halves:
-        piece = {**search, "strdate": low.isoformat(), "enddate": high.isoformat()}
-        pieces.append(run_search(client, piece))
+    pieces = run_parallel(
+        client,
+        lambda half: run_search(
+            client, {**search, "strdate": half[0].isoformat(), "enddate": half[1].isoformat()}
+        ),
+        halves,
+    )
     notes = f"split at {middle}: {total} results reach the cap of {SCOPE['max_results_per_query']}"
     return combine_pieces(total, pieces, notes)
 

@@ -21,7 +21,7 @@ from urllib.parse import parse_qs, urljoin, urlsplit
 
 from bs4 import BeautifulSoup, Tag
 
-from core.fetch import Client, RequestFailed
+from core.fetch import Client, RequestFailed, run_parallel
 from core.matching import find_countries, find_keywords, is_african
 from core.searching import SearchResult
 
@@ -184,13 +184,15 @@ def idev_search(client: Client) -> SearchResult:
     if not IDEV_TYPES.issubset(categories):
         return SearchResult([], error="IDEV target category missing from runtime taxonomy")
 
-    # Facet labels, rather than stored numeric IDs, define the five project-evaluation sweeps.
-    results = [
-        enumerate_listing(
+    # Facet labels, rather than stored numeric IDs, define the five project-evaluation
+    # sweeps. They run in parallel: idev.afdb.org sets no Crawl-delay (checked 2026-10-22).
+    results = run_parallel(
+        client,
+        lambda name: enumerate_listing(
             client, IDEV_SEARCH, "idev", {"field_category_doc_target_id": categories[name]}
-        )
-        for name in sorted(IDEV_TYPES)
-    ]
+        ),
+        sorted(IDEV_TYPES),
+    )
     records = {row["id"]: row for result in results for row in result.records}
     return SearchResult(
         list(records.values()),
