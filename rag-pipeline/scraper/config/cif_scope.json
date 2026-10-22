@@ -1,0 +1,12 @@
+{
+  "checked": "2026-10-15",
+  "max_results_per_query": null,
+  "page_size": 1000,
+  "collections": [
+    "knowledge_documents",
+    "documents",
+    "resource_collection_sub_item"
+  ],
+  "pagination_evidence": "7228 documents: offset6500 returned728. page size5000 returned5000.",
+  "date_filter": "Applied locally: server date predicate returned zero for known dated rows."
+}

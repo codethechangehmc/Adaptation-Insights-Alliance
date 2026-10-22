@@ -1,0 +1,111 @@
+{
+  "countries": {
+    "Algeria": ["Algeria", "Algérie"],
+    "Angola": ["Angola"],
+    "Benin": ["Benin", "Bénin"],
+    "Botswana": ["Botswana"],
+    "Burkina Faso": ["Burkina Faso", "Burkina"],
+    "Burundi": ["Burundi"],
+    "Cabo Verde": ["Cabo Verde", "Cape Verde", "Cap-Vert"],
+    "Cameroon": ["Cameroon", "Cameroun"],
+    "Central African Republic": ["Central African Republic", "Centrafrique", "République centrafricaine"],
+    "Chad": ["Chad", "Tchad"],
+    "Comoros": ["Comoros", "Comores", "Union of the Comoros"],
+    "Democratic Republic of the Congo": [
+      "Democratic Republic of the Congo", "Democratic Republic of Congo",
+      "Congo, Democratic Republic of", "Congo, Democratic Republic of the",
+      "Congo, Dem. Rep.", "Congo DR", "DR Congo", "DRC", "Congo (Kinshasa)",
+      "République démocratique du Congo"
+    ],
+    "Republic of the Congo": [
+      "Republic of the Congo", "Republic of Congo", "Congo, Republic of",
+      "Congo, Republic of the", "Congo, Rep.", "Congo (Brazzaville)", "Congo-Brazzaville",
+      "Congo", "République du Congo"
+    ],
+    "Cote d'Ivoire": ["Cote d'Ivoire", "Côte d'Ivoire", "Cote dIvoire", "Ivory Coast"],
+    "Djibouti": ["Djibouti"],
+    "Egypt": ["Egypt", "Egypt, Arab Republic of", "Arab Republic of Egypt", "Égypte"],
+    "Equatorial Guinea": ["Equatorial Guinea", "Guinée équatoriale"],
+    "Eritrea": ["Eritrea", "Érythrée"],
+    "Eswatini": ["Eswatini", "Swaziland", "Kingdom of Eswatini"],
+    "Ethiopia": ["Ethiopia", "Éthiopie"],
+    "Gabon": ["Gabon"],
+    "Gambia": ["Gambia", "Gambia, The", "The Gambia", "Gambie"],
+    "Ghana": ["Ghana"],
+    "Guinea": ["Guinea", "Guinée", "Guinea-Conakry"],
+    "Guinea-Bissau": ["Guinea-Bissau", "Guinea Bissau", "Guinée-Bissau"],
+    "Kenya": ["Kenya"],
+    "Lesotho": ["Lesotho"],
+    "Liberia": ["Liberia", "Libéria"],
+    "Libya": ["Libya", "Libye"],
+    "Madagascar": ["Madagascar"],
+    "Malawi": ["Malawi"],
+    "Mali": ["Mali"],
+    "Mauritania": ["Mauritania", "Mauritanie"],
+    "Mauritius": ["Mauritius"],
+    "Morocco": ["Morocco", "Maroc"],
+    "Mozambique": ["Mozambique", "Moçambique"],
+    "Namibia": ["Namibia", "Namibie"],
+    "Niger": ["Niger"],
+    "Nigeria": ["Nigeria", "Nigéria"],
+    "Rwanda": ["Rwanda"],
+    "Sao Tome and Principe": ["Sao Tome and Principe", "São Tomé and Príncipe", "Sao Tome", "São Tomé"],
+    "Senegal": ["Senegal", "Sénégal"],
+    "Seychelles": ["Seychelles"],
+    "Sierra Leone": ["Sierra Leone"],
+    "Somalia": ["Somalia", "Somalie"],
+    "South Africa": ["South Africa", "Afrique du Sud"],
+    "South Sudan": ["South Sudan", "Soudan du Sud"],
+    "Sudan": ["Sudan", "Soudan"],
+    "Tanzania": ["Tanzania", "United Republic of Tanzania", "Tanzanie"],
+    "Togo": ["Togo"],
+    "Tunisia": ["Tunisia", "Tunisie"],
+    "Uganda": ["Uganda", "Ouganda"],
+    "Zambia": ["Zambia", "Zambie"],
+    "Zimbabwe": ["Zimbabwe"]
+  },
+  "regions": {
+    "Africa": [
+      "Africa", "Sub-Saharan Africa", "Sub Saharan Africa", "Afrique", "Pan-African"
+    ],
+    "West Africa": [
+      "West Africa", "Western Africa", "Western and Central Africa", "West and Central Africa",
+      "Afrique de l'Ouest", "ECOWAS", "UEMOA", "WAEMU", "CILSS"
+    ],
+    "East Africa": [
+      "East Africa", "Eastern Africa", "Eastern and Southern Africa", "East and Southern Africa",
+      "Horn of Africa", "IGAD", "Afrique de l'Est"
+    ],
+    "Southern Africa": ["Southern Africa", "SADC", "Afrique australe"],
+    "Central Africa": ["Central Africa", "CEMAC", "ECCAS", "Afrique centrale"],
+    "North Africa": ["North Africa", "Northern Africa", "Maghreb", "Afrique du Nord"],
+    "Sahel": ["Sahel", "Sahelian", "Lake Chad Basin", "Lake Chad"],
+    "COMESA": ["COMESA"]
+  },
+  "not_african": [
+    "Papua New Guinea", "New Guinea", "Guinea fowl", "Guinea pig", "Guinea worm"
+  ],
+  "agriculture_keywords": [
+    "agriculture", "agricultural", "farming", "farm", "farmer", "farmland", "crop",
+    "livestock", "pastoral", "pastoralist", "fisheries", "fishery", "aquaculture",
+    "agroforestry", "food security", "food system", "food production", "value chain",
+    "agribusiness", "smallholder", "irrigation", "seed", "fertilizer", "soil", "land use",
+    "cereal", "maize", "rice", "wheat", "sorghum", "millet", "cassava", "yam", "cocoa",
+    "coffee", "tea", "cotton", "horticulture", "vegetable", "fruit", "dairy", "poultry",
+    "cattle", "goat", "sheep", "camel", "rural development", "rural livelihood", "food aid",
+    "nutrition", "hunger", "agro-pastoral", "agropastoral", "dryland", "rangeland",
+    "extension service", "farmer field school"
+  ],
+  "adaptation_keywords": [
+    "adaptation", "climate adaptation", "climate change adaptation", "climate resilience",
+    "resilience", "climate-smart", "climate smart agriculture", "CSA", "drought", "flood",
+    "rainfall variability", "water scarcity", "desertification", "land degradation",
+    "soil erosion", "climate risk", "climate vulnerability", "early warning", "weather index",
+    "crop insurance", "index insurance", "disaster risk reduction", "DRR",
+    "climate information", "climate services", "adaptive capacity", "vulnerability reduction",
+    "water management", "water harvesting", "conservation agriculture", "climate-proofing",
+    "heat stress", "sea level rise", "salinization", "pest", "disease outbreak", "food crisis",
+    "famine", "El Nino", "La Nina", "LDCF", "SCCF", "NAP", "NAPA", "NDC",
+    "nationally determined contribution"
+  ]
+}

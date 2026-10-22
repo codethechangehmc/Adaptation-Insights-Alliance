@@ -1,0 +1,17 @@
+{
+  "checked": "2026-10-15",
+  "max_results_per_query": null,
+  "idev_categories": [
+    "Project performance evaluation",
+    "Project cluster evaluation",
+    "Impact evaluation",
+    "Evaluation report",
+    "Project Completion Report and Expanded Supervision Report Validation synthesis"
+  ],
+  "pagination_evidence": "PCR page59; complete evaluation umbrella page28. Legacy subcategory aliases redirect incorrectly; runtime IDEV taxonomy sweeps five project categories.",
+  "manual_listing": "Optional complete CSV title,web_url,doc_date,language,project_code,pdf_url.",
+  "listing_paths": {
+    "pcr": "/en/documents/project-operations/projectprogramme-completion-reports",
+    "evaluations": "/en/documents/evaluation-reports"
+  }
+}

@@ -1,0 +1,204 @@
+{
+  "data": {
+    "import_id": "AF.family.007NSNCR.0",
+    "title": "Adaptation to Coastal Erosion in Vulnerable Areas",
+    "concepts": [],
+    "created": "2024-10-31T16:31:02.515309Z",
+    "corpus": {
+      "import_id": "MCF.corpus.AF.n0000",
+      "title": "Adaptation Fund Projects",
+      "corpus_type_name": "AF",
+      "attribution_url": "https://app.climatepolicyradar.org",
+      "corpus_text": "<p>Project information is sourced from the Adaptation Fund. Please check terms of use for citation and licensing of third party data.</p>",
+      "corpus_image_url": "corpora/MCF.corpus.AF.n0000/af_logo.png",
+      "organisation": {
+        "attribution_url": null,
+        "id": 7,
+        "name": "AF"
+      },
+      "corpus_type": {
+        "name": "AF",
+        "description": "AF"
+      }
+    },
+    "corpus_id": "MCF.corpus.AF.n0000",
+    "organisation": "AF",
+    "organisation_attribution_url": null,
+    "summary": "The project, which encompasses the areas of Rufisque, Saly, and Joal, aims to protect people, houses, economic and cultural infrastructure in the region against coastal erosion. Across all three project sites, the aim is to develop regulations that encompass adaptation, the revision of the environmental code, the adoption of the law on the littoral, and helping local people better understand adaptation techniques to climate change in coastal areas and about the importance of respecting regulations for the management of littoral zones.",
+    "geographies": [
+      "SEN"
+    ],
+    "published_date": "2010-09-17T00:00:00Z",
+    "last_updated_date": "2014-11-01T00:00:00Z",
+    "slug": "adaptation-to-coastal-erosion-in-vulnerable-areas_b002",
+    "category": "MCF",
+    "corpus_type_name": "AF",
+    "collections": [],
+    "events": [
+      {
+        "import_id": "AF.event.007NSNCR.n0000",
+        "title": "Project Approved",
+        "date": "2010-09-17T00:00:00Z",
+        "event_type": "Project Approved",
+        "status": "OK",
+        "metadata": {
+          "event_type": [
+            "Project Approved"
+          ],
+          "datetime_event_name": [
+            "Project Approved"
+          ]
+        }
+      },
+      {
+        "import_id": "AF.event.007NSNCR.n0001",
+        "title": "Under Implementation",
+        "date": "2011-01-21T00:00:00Z",
+        "event_type": "Under Implementation",
+        "status": "OK",
+        "metadata": {
+          "event_type": [
+            "Under Implementation"
+          ],
+          "datetime_event_name": [
+            "Project Approved"
+          ]
+        }
+      },
+      {
+        "import_id": "AF.event.007NSNCR.n0002",
+        "title": "Project Completed",
+        "date": "2014-11-01T00:00:00Z",
+        "event_type": "Project Completed",
+        "status": "OK",
+        "metadata": {
+          "event_type": [
+            "Project Completed"
+          ],
+          "datetime_event_name": [
+            "Project Approved"
+          ]
+        }
+      }
+    ],
+    "documents": [
+      {
+        "import_id": "AF.document.007NSNCR.n0000",
+        "variant_name": "Original Language",
+        "document_status": "published",
+        "last_modified": "2024-11-04T17:27:38.307357Z",
+        "created": "2024-10-31T16:31:02.515309Z",
+        "valid_metadata": {},
+        "slug": "project-document_3772",
+        "title": "Project document",
+        "cdn_object": "https://cdn.climatepolicyradar.org/navigator/SEN/2010/adaptation-to-coastal-erosion-in-vulnerable-areas_891e7dcc5410776d05c93359de00ad2c.pdf",
+        "variant": "Original Language",
+        "md5_sum": "891e7dcc5410776d05c93359de00ad2c",
+        "source_url": "https://fifspubprd.azureedge.net/afdocuments/project/20/20_ADAPT_FUND%20SENEGAL_proposal.pdf",
+        "content_type": "application/pdf",
+        "language": "eng",
+        "languages": [
+          "eng"
+        ],
+        "document_type": null,
+        "document_role": "",
+        "events": []
+      },
+      {
+        "import_id": "AF.document.007NSNCR.n0001",
+        "variant_name": "Original Language",
+        "document_status": "published",
+        "last_modified": "2024-11-04T16:53:27.444220Z",
+        "created": "2024-10-31T16:31:02.515309Z",
+        "valid_metadata": {},
+        "slug": "mid-term-evaluation-report_1a27",
+        "title": "Mid-term evaluation report",
+        "cdn_object": "https://cdn.climatepolicyradar.org/navigator/SEN/2010/adaptation-to-coastal-erosion-in-vulnerable-areas_3dd7039fb1dbe043fff552e11a35a97f.pdf",
+        "variant": "Original Language",
+        "md5_sum": "3dd7039fb1dbe043fff552e11a35a97f",
+        "source_url": "https://fifspubprd.azureedge.net/afdocuments/project/20/20_Rapport_EMP-nov%202012_final_French.pdf",
+        "content_type": "application/pdf",
+        "language": "fra",
+        "languages": [
+          "fra"
+        ],
+        "document_type": null,
+        "document_role": "",
+        "events": []
+      },
+      {
+        "import_id": "AF.document.007NSNCR.n0002",
+        "variant_name": "Original Language",
+        "document_status": "published",
+        "last_modified": "2024-11-04T16:55:08.483404Z",
+        "created": "2024-10-31T16:31:02.515309Z",
+        "valid_metadata": {},
+        "slug": "final-evaluation-report_92a9",
+        "title": "Final evaluation report",
+        "cdn_object": "https://cdn.climatepolicyradar.org/navigator/SEN/2010/adaptation-to-coastal-erosion-in-vulnerable-areas_ee2eaa9d5fc9c47a218b6d54f322f0dd.pdf",
+        "variant": "Original Language",
+        "md5_sum": "ee2eaa9d5fc9c47a218b6d54f322f0dd",
+        "source_url": "https://fifspubprd.azureedge.net/afdocuments/project/20/20_AF%20Project%20Senegal_Final%20Evaluation%20Report_with%20Annexes_C4ES_14%20August%202015.pdf",
+        "content_type": "application/pdf",
+        "language": "eng",
+        "languages": [
+          "eng"
+        ],
+        "document_type": null,
+        "document_role": "",
+        "events": []
+      },
+      {
+        "import_id": "AF.document.007NSNCR.n0003",
+        "variant_name": "Original Language",
+        "document_status": "published",
+        "last_modified": "2024-11-04T16:36:10.679091Z",
+        "created": "2024-10-31T16:31:02.515309Z",
+        "valid_metadata": {},
+        "slug": "project-performance-report-1_d951",
+        "title": "Project performance report 1",
+        "cdn_object": "https://cdn.climatepolicyradar.org/navigator/SEN/2010/adaptation-to-coastal-erosion-in-vulnerable-areas_f56941594132917e4987e8ddf536e297.pdf",
+        "variant": "Original Language",
+        "md5_sum": "f56941594132917e4987e8ddf536e297",
+        "source_url": "https://fifspubprd.azureedge.net/afdocuments/project/20/20_Half%20yearly%20report%20September%202011.pdf",
+        "content_type": "application/pdf",
+        "language": "eng",
+        "languages": [
+          "eng"
+        ],
+        "document_type": null,
+        "document_role": "",
+        "events": []
+      }
+    ],
+    "metadata": {
+      "domain": [
+        "Climate"
+      ],
+      "region": [
+        "Africa"
+      ],
+      "sector": [
+        "Coastal management"
+      ],
+      "status": [
+        "Project Completed"
+      ],
+      "project_id": [
+        "007NSNCR"
+      ],
+      "project_url": [
+        "https://www.adaptation-fund.org/project/adaptation-to-coastal-erosion-in-vulnerable-areas/"
+      ],
+      "implementing_agency": [
+        "Centre de Suivi Ecologique"
+      ],
+      "project_value_fund_spend": [
+        "8619000"
+      ],
+      "project_value_co_financing": [
+        "0"
+      ]
+    }
+  }
+}
