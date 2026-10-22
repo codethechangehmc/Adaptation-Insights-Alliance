@@ -18,8 +18,8 @@ python rag-pipeline/scraper/run_all.py --metadata-only
 Sources are World Bank, Adaptation Fund, African Development Bank, Climate
 Investment Funds, Green Climate Fund, Global Environment Facility and IFAD.
 World Bank project details and GEF document dates have separate helper commands.
-See the [scraper guide](scraper/README.md) for strategies, options,
-validation limitations and output columns.
+See the [scraper guide](scraper/README.md) for setup, commands, output files
+and current source status.
 
 ## Persistent storage
 
@@ -30,8 +30,7 @@ commands and `scraper/run_all.py` for batch runs; tests and fixtures are in
 
 `scraper/run.py` lists every command. The shared runner coordinates the
 workflow; searching, classification, matching, HTTP, downloads and storage
-have separate modules. The scraper guide includes a
-[code map](scraper/README.md#where-to-make-a-change) for common maintenance tasks.
+have separate modules.
 Shared behavior tests live in `scraper/tests/core/`; source tests remain
 in `scraper/tests/test_<source>.py`, alongside helper and launcher tests.
 
@@ -63,8 +62,6 @@ measured by field with holdouts reserved from tuning.
 
 From `rag-pipeline/scraper/`, run `python -m unittest discover -s tests -t .`.
 From `rag-pipeline/`, run `ruff check .` and `ruff format --check .`.
-The scraper guide describes how to add sources with plain functions, shared
-HTTP/state handling and small offline fixtures.
 
 ## Retrieval review
 
