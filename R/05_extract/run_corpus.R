@@ -81,7 +81,7 @@ pid_for <- local({
 # the document family from the census (02_dedup/doc_census.R): what the
 # extractor routes on. Empty when the census has not seen the file.
 fam_for <- local({
-  f <- file.path(dirname(REPO), "04_Extraction_Results", "review", "family_census.csv")
+  f <- file.path(dirname(REPO), "04_Screening", "inputs", "decisions", "family_census.csv")
   lk <- if (file.exists(f)) {
     cen <- read.csv(f, stringsAsFactors = FALSE, colClasses = "character")
     setNames(cen$family, cen$filename)
@@ -118,7 +118,7 @@ if (nrow(mf)) print(table(family = ifelse(nzchar(mf$family), mf$family, "(not in
 # only documents the screener judged in scope are extracted (verdict_ruled
 # once screen_rules.R has run); files the screener has not seen still go
 # through; --all ignores the verdicts
-scr <- file.path(dirname(REPO), "04_Extraction_Results", "review", "scope_screen.csv")
+scr <- file.path(dirname(REPO), "04_Screening", "scope_screen.csv")
 if (file.exists(scr) && !any(args == "--all")) {
   sv <- read.csv(scr, stringsAsFactors = FALSE, colClasses = "character")
   v  <- if ("verdict_ruled" %in% names(sv)) sv$verdict_ruled else sv$verdict

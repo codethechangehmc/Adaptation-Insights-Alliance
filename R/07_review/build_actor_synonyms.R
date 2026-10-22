@@ -212,7 +212,7 @@ if (nrow(rej)) {
   writeData(wb, "not_used_and_why", rej, headerStyle = hdr, withFilter = TRUE)
   setColWidths(wb, "not_used_and_why", cols = 1:4, widths = c(14, 46, 26, 54))
 }
-f_out <- file.path(REVIEW_DIR, "actor_synonyms_for_template.xlsx")
+f_out <- file.path(VOCAB_DIR, "actor_synonyms_for_template.xlsx")
 saveWorkbook(wb, f_out, overwrite = TRUE)
 cat("written:", f_out, "\n")
 cat("        ", sum(nzchar(paste_ready$synonyms)), "of", nrow(paste_ready),

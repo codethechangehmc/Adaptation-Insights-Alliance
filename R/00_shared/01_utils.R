@@ -67,9 +67,17 @@ polite_get <- function(url,
   for (attempt in seq_len(max_retries)) {
     resp <- tryCatch(
       {
+        # Several hosts (afdb.org since Oct 2026) answer 403 to requests with
+        # no Accept headers at all, while accepting the same honest UA once
+        # ordinary browser Accept headers are present. Identify truthfully,
+        # but send a normal header set.
         httr::GET(
           url,
           httr::user_agent(HTTP_CONFIG$user_agent),
+          httr::add_headers(
+            Accept = "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7",
+            `Accept-Language` = "en-US,en;q=0.9,fr;q=0.8"
+          ),
           httr::timeout(HTTP_CONFIG$timeout_sec),
           ...
         )
@@ -116,7 +124,22 @@ polite_get <- function(url,
       next
     }
 
-    # Client error (4xx other than 429) — don't retry
+    # Burst throttling: edge caches (e.g. GEF's Varnish) answer 403 to rapid
+    # sequences and recover after a pause. Back off long and retry; a genuine
+    # permanent 403 just costs max_retries slow attempts. Callers must treat
+    # a final NULL/403 as a hard stop, never as an empty listing.
+    if (status == 403) {
+      cli::cli_alert_warning("Throttled or refused (403) on attempt {attempt}/{max_retries}: {url}")
+      if (attempt < max_retries) {
+        backoff <- max(20, delay * (2^attempt)) + runif(1, 0, 10)
+        cli::cli_alert_info("Backing off {round(backoff)}s before retrying...")
+        Sys.sleep(backoff)
+        next
+      }
+      return(resp)
+    }
+
+    # Client error (4xx other than 429/403) — don't retry
     cli::cli_alert_danger("HTTP {status} for: {url}")
     return(resp)
   }
@@ -189,11 +212,16 @@ safe_get_json <- function(url) {
 #' @return TRUE if download succeeded and PDF is valid, FALSE otherwise.
 download_pdf <- function(url, dest,
                          min_bytes = HTTP_CONFIG$min_pdf_bytes) {
-  # Skip if already exists
-
+  # Skip only if the existing file is VALID. Returning "skipped" for a
+  # truncated or non-PDF leftover would make every re-download pass no-op on
+  # exactly the files it exists to replace.
   if (file.exists(dest)) {
-    cli::cli_alert_info("Already exists, skipping: {basename(dest)}")
-    return("skipped")
+    if (valid_local_file(dest, "pdf", min_bytes)) {
+      cli::cli_alert_info("Already exists and valid, skipping: {basename(dest)}")
+      return("skipped")
+    }
+    cli::cli_alert_warning("Existing file invalid, re-downloading: {basename(dest)}")
+    file.remove(dest)
   }
 
   # Ensure directory exists
@@ -250,6 +278,217 @@ download_pdf <- function(url, dest,
 
   cli::cli_alert_success("Downloaded: {basename(dest)} ({round(fsize/1024)}KB)")
   return(TRUE)
+}
+
+# ── File validation and non-PDF downloads ──────────────────────────────────
+# Magic bytes and floors per kind. zip covers docx/xlsx (OOXML packages);
+# doc/xls are OLE2 compound files.
+FILE_KINDS <- list(
+  pdf  = list(magic = charToRaw("%PDF-"),                  min_bytes = 10240L),
+  zip  = list(magic = as.raw(c(0x50, 0x4B, 0x03, 0x04)),   min_bytes = 2048L),
+  docx = list(magic = as.raw(c(0x50, 0x4B, 0x03, 0x04)),   min_bytes = 2048L),
+  xlsx = list(magic = as.raw(c(0x50, 0x4B, 0x03, 0x04)),   min_bytes = 2048L),
+  doc  = list(magic = as.raw(c(0xD0, 0xCF, 0x11, 0xE0)),   min_bytes = 4096L),
+  xls  = list(magic = as.raw(c(0xD0, 0xCF, 0x11, 0xE0)),   min_bytes = 4096L)
+)
+
+#' Is a local file plausibly intact: present, above the size floor for its
+#' kind, and starting with the right magic bytes?
+valid_local_file <- function(path, kind = NULL, min_bytes = NULL) {
+  if (!file.exists(path)) return(FALSE)
+  if (is.null(kind)) kind <- tolower(tools::file_ext(path))
+  spec <- FILE_KINDS[[kind]]
+  if (is.null(spec)) return(file.info(path)$size > 0)   # unknown kind: exist + non-empty
+  if (is.null(min_bytes)) min_bytes <- spec$min_bytes
+  fsize <- file.info(path)$size
+  if (is.na(fsize) || fsize < min_bytes) return(FALSE)
+  magic <- tryCatch({
+    con <- file(path, "rb"); on.exit(close(con))
+    readBin(con, "raw", n = length(spec$magic))
+  }, error = function(e) raw(0))
+  identical(magic, spec$magic)
+}
+
+#' download_pdf for any FILE_KINDS kind: same politeness, same validation
+#' discipline (size floor + magic bytes), same TRUE / FALSE / "skipped"
+#' contract. kind defaults to the destination's extension.
+download_file <- function(url, dest, kind = NULL, min_bytes = NULL) {
+  if (is.null(kind)) kind <- tolower(tools::file_ext(dest))
+  if (!kind %in% names(FILE_KINDS)) {
+    cli::cli_alert_danger("download_file: unknown kind {kind} for {basename(dest)}")
+    return(FALSE)
+  }
+  if (identical(kind, "pdf")) return(download_pdf(url, dest,
+    min_bytes = if (is.null(min_bytes)) HTTP_CONFIG$min_pdf_bytes else min_bytes))
+  if (is.null(min_bytes)) min_bytes <- FILE_KINDS[[kind]]$min_bytes
+
+  if (file.exists(dest)) {
+    if (valid_local_file(dest, kind, min_bytes)) {
+      cli::cli_alert_info("Already exists and valid, skipping: {basename(dest)}")
+      return("skipped")
+    }
+    cli::cli_alert_warning("Existing file invalid, re-downloading: {basename(dest)}")
+    file.remove(dest)
+  }
+  dir.create(dirname(dest), recursive = TRUE, showWarnings = FALSE)
+  resp <- polite_get(url)
+  if (is.null(resp) || httr::status_code(resp) != 200) {
+    cli::cli_alert_danger("Download failed: {basename(dest)}")
+    return(FALSE)
+  }
+  ok <- tryCatch({ writeBin(httr::content(resp, as = "raw"), dest); TRUE },
+                 error = function(e) {
+                   cli::cli_alert_danger("Write error: {e$message}")
+                   if (file.exists(dest)) file.remove(dest)
+                   FALSE
+                 })
+  if (!ok) return(FALSE)
+  if (!valid_local_file(dest, kind, min_bytes)) {
+    cli::cli_alert_warning("Invalid {kind} (size or magic bytes): {basename(dest)}")
+    file.remove(dest)
+    return(FALSE)
+  }
+  cli::cli_alert_success("Downloaded: {basename(dest)} ({round(file.info(dest)$size/1024)}KB)")
+  TRUE
+}
+
+# ── Response assertions ─────────────────────────────────────────────────────
+# Every scraper failure found in the Oct 2026 audit was a source answering
+# HTTP 200 with the wrong content: GCF returned an empty AJAX shell, the
+# World Bank API returned total=0 for misspelled document types, AfDB served
+# the same wildcard parent view for any path under /evaluation-reports/.
+# assert_response makes a listing/API fetch fail LOUDLY unless the response
+# demonstrably matches the request.
+
+#' Assert that a response matches what was requested.
+#'
+#' @param resp httr response (or NULL) as returned by polite_get().
+#' @param url  The requested URL, for messages and the log.
+#' @param expect list with any of:
+#'   status       allowed status codes (default 200:299)
+#'   content_type prefix the Content-Type must start with (e.g. "text/html")
+#'   min_bytes    minimum body size
+#'   title        regex the HTML <title> must match
+#'   contains     character vector of regexes that must ALL match the body —
+#'                include something ECHOING THE REQUEST (the queried facet
+#'                label, the searched term), or a wildcard view will pass
+#'   not_contains regexes that must match NOWHERE (e.g. the known signature
+#'                of a generic parent view)
+#'   check        function(body_text) returning TRUE, or a message string
+#' @param on_fail "stop" (default), "warn" (log + return NULL), or "quiet"
+#'                (return NULL silently — for canaries that EXPECT failure).
+#' @param source  source name for the download log.
+#' @return resp invisibly on pass; NULL on fail when not stopping.
+assert_response <- function(resp, url, expect = list(),
+                            on_fail = c("stop", "warn", "quiet"), source = NA) {
+  on_fail <- match.arg(on_fail)
+  fail <- function(why) {
+    if (on_fail != "quiet") {
+      cli::cli_alert_danger("response assertion failed: {why}")
+      cli::cli_alert_danger("  for: {url}")
+      log_download(source = ifelse(is.na(source), "assert", source), url = url,
+                   status = "assertion_failed", notes = why)
+      if (on_fail == "stop") stop("assert_response: ", why, "\n  url: ", url, call. = FALSE)
+    }
+    NULL
+  }
+  if (is.null(resp)) return(fail("no response (transport failure or retries exhausted)"))
+  status <- httr::status_code(resp)
+  allowed <- if (is.null(expect$status)) 200:299 else expect$status
+  if (!status %in% allowed) return(fail(paste0("HTTP ", status)))
+  if (!is.null(expect$content_type)) {
+    ct <- httr::headers(resp)[["content-type"]]
+    if (is.null(ct) || !startsWith(tolower(ct), tolower(expect$content_type)))
+      return(fail(paste0("content-type ", ct %||% "<none>", " != ", expect$content_type)))
+  }
+  body <- tryCatch(httr::content(resp, as = "text", encoding = "UTF-8"),
+                   error = function(e) "")
+  if (!is.null(expect$min_bytes) && nchar(body, type = "bytes") < expect$min_bytes)
+    return(fail(paste0("body under ", expect$min_bytes, " bytes")))
+  if (!is.null(expect$title)) {
+    title <- sub(".*<title[^>]*>\\s*(.*?)\\s*</title>.*", "\\1",
+                 gsub("[\r\n]", " ", body))
+    if (!grepl(expect$title, title, ignore.case = TRUE))
+      return(fail(paste0("page title ", substr(title, 1, 60), " !~ /", expect$title, "/")))
+  }
+  for (re in expect$contains)
+    if (!grepl(re, body, ignore.case = TRUE))
+      return(fail(paste0("body does not contain /", re, "/")))
+  for (re in expect$not_contains)
+    if (grepl(re, body, ignore.case = TRUE))
+      return(fail(paste0("body CONTAINS forbidden /", re, "/")))
+  if (!is.null(expect$check)) {
+    r <- expect$check(body)
+    if (!isTRUE(r)) return(fail(if (is.character(r)) r else "custom check failed"))
+  }
+  invisible(resp)
+}
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+#' Run at a scraper's start: the known-good listing must PASS its assertion
+#' and a nonsense URL must FAIL it. Catches wildcard soft-200 servers (the
+#' AfDB failure class) and assertions too weak to tell views apart.
+canary_check <- function(source, good_url, expect, nonsense_url,
+                         nonsense_expect = expect) {
+  g <- assert_response(polite_get(good_url), good_url, expect,
+                       on_fail = "warn", source = source)
+  if (is.null(g))
+    stop("canary (", source, "): the known-good listing failed its own assertion; ",
+         "the site changed or the expectation is wrong - do not scrape blind", call. = FALSE)
+  b <- assert_response(polite_get(nonsense_url), nonsense_url, nonsense_expect,
+                       on_fail = "quiet", source = source)
+  if (!is.null(b))
+    stop("canary (", source, "): a NONSENSE url passed the assertion - the server ",
+         "serves a wildcard view this expectation cannot tell apart; tighten `expect`",
+         call. = FALSE)
+  cli::cli_alert_success("canary ok ({source}): good listing passes, nonsense fails")
+  invisible(TRUE)
+}
+
+# ── Attestation ledger ──────────────────────────────────────────────────────
+# One row per document the source's website lists, with what we did about it.
+# The ledger is the completeness guarantee: rerun the scraper, rebuild the
+# site inventory, diff against the ledger, and only new or changed rows need
+# action. Every row must carry a disposition; a gate fails on blanks.
+ATTEST_DISPOSITIONS <- c("fetched", "already_held", "failed_download",
+                         "out_by_type", "duplicate", "parked_progress",
+                         "excluded_desk_review", "held_pending_window_decision")
+ATTEST_COLS <- c("source", "site_id", "title", "doc_type_site", "listing",
+                 "discovered_at", "disposition", "local_filename", "notes")
+
+attestation_path <- function(source)
+  file.path(PROJECT_ROOT, "catalogues", source, "attestation.csv")
+
+read_attestation <- function(source) {
+  p <- attestation_path(source)
+  if (!file.exists(p)) return(NULL)
+  readr::read_csv(p, col_types = readr::cols(.default = "c"))
+}
+
+#' Validate and write a source's ledger (full overwrite: the ledger always
+#' mirrors the latest site inventory). Carries discovered_at forward for rows
+#' already known.
+write_attestation <- function(source, df) {
+  stopifnot(all(c("site_id", "disposition") %in% names(df)))
+  for (col in ATTEST_COLS) if (!col %in% names(df)) df[[col]] <- NA_character_
+  df$source <- source
+  bad <- !df$disposition %in% ATTEST_DISPOSITIONS
+  if (any(bad))
+    stop("write_attestation(", source, "): ", sum(bad), " rows with dispositions outside the vocabulary: ",
+         paste(unique(df$disposition[bad]), collapse = ", "), call. = FALSE)
+  old <- read_attestation(source)
+  if (!is.null(old)) {
+    keep <- setNames(old$discovered_at, old$site_id)
+    known <- df$site_id %in% names(keep)
+    df$discovered_at[known] <- keep[df$site_id[known]]
+  }
+  df$discovered_at[is.na(df$discovered_at)] <- format(Sys.Date())
+  p <- attestation_path(source)
+  dir.create(dirname(p), recursive = TRUE, showWarnings = FALSE)
+  readr::write_csv(df[, ATTEST_COLS], p)
+  cli::cli_alert_success("attestation ({source}): {nrow(df)} rows, all dispositioned")
+  invisible(df)
 }
 
 # ── Safe Filename ──────────────────────────────────────────────────────────
@@ -357,13 +596,33 @@ log_download <- function(source, project_code = NA, doc_type = NA,
     notes        = as.character(notes)
   )
 
+  # GL_LOG_SUFFIX shards the log per source (download_log_<suffix>.csv) so
+  # concurrently running scrapers never append to the same file; merge with
+  # merge_download_logs() afterwards.
   log_path <- PATHS$log_file
+  suffix <- Sys.getenv("GL_LOG_SUFFIX", "")
+  if (nzchar(suffix)) log_path <- sub("\\.csv$", paste0("_", suffix, ".csv"), log_path)
 
   if (file.exists(log_path)) {
     readr::write_csv(entry, log_path, append = TRUE)
   } else {
     readr::write_csv(entry, log_path)
   }
+}
+
+#' Fold sharded download logs (download_log_<suffix>.csv) back into the main
+#' log, ordered by timestamp, and remove the shards.
+merge_download_logs <- function() {
+  main <- PATHS$log_file
+  shards <- Sys.glob(sub("\\.csv$", "_*.csv", main))
+  if (!length(shards)) return(invisible(0L))
+  all <- lapply(c(if (file.exists(main)) main, shards),
+                readr::read_csv, col_types = readr::cols(.default = "c"))
+  out <- dplyr::arrange(dplyr::bind_rows(all), timestamp)
+  readr::write_csv(out, main)
+  file.remove(shards)
+  cli::cli_alert_success("merged {length(shards)} log shard{?s} into {basename(main)}")
+  invisible(length(shards))
 }
 
 # ── Summary Reporter ───────────────────────────────────────────────────────

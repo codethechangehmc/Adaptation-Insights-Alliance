@@ -26,7 +26,7 @@
 # appear near target wording, is flagged.
 #
 #   Rscript R/07_review/audit_reference_targets.R
-#   -> 04_Extraction_Results/review/reference_target_check.csv
+#   -> 05_Extraction_Results/gold_pilot/reference_target_check.csv
 ##############################################################################
 
 suppressPackageStartupMessages({ library(pdftools) })
@@ -148,8 +148,8 @@ h <- audit_set(file.path(REPO, "catalogues", "holdout_reference.csv"),
 res <- rbind(g, h)
 if (is.null(res)) { cat("nothing to report\n"); quit(save = "no") }
 
-dir.create(REVIEW_DIR, recursive = TRUE, showWarnings = FALSE)
-out <- file.path(REVIEW_DIR, "reference_target_check.csv")
+dir.create(VOCAB_DIR, recursive = TRUE, showWarnings = FALSE)
+out <- file.path(REPO, "outputs", "extraction", "reference_target_check.csv")
 write.csv(res, out, row.names = FALSE, na = "")
 cat("\nwritten:", out, "\n")
 cat("figures checked:", nrow(res), "\n")

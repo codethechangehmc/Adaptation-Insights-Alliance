@@ -34,7 +34,7 @@ suppressPackageStartupMessages({
 
 MODE  <- Sys.getenv("EXTRACT_MODE", "pilot")
 MODEL <- Sys.getenv("EXTRACT_MODEL", "gpt-5-mini")
-PROMPT_VERSION <- "s1-v2.6"   # v2.6 (29 Sep 2026): result values keep their decimals (3.6 stays 3.6, 12.5 stays 12.5); v2.5 (28 Sep 2026): headline results rule (reach, physical, effect; eligibility, category, beneficiary anchor); v2.4: money as plain digits, rationale is the reason not the achievement; v2.3: national bodies carry their country; v2.2 (Charity pilot): planned closing and template dates excluded, AfDB numbers and unit codes; v2.1: countries, explicit start; v2.0: one module per document
+PROMPT_VERSION <- "s1-v2.7"   # v2.7 (30 Sep 2026): evidence travels with every value, for the consultant QC workbooks. A page per field across identity, geography and finance (pg1()); start_year_evidence/closure_year_evidence renamed to _quote; the money fields carry the document's own wording (budget_total_stated and friends) so an expanded figure like 1710000 is checkable against "UA 1.71 million" on the page; GESI gets a quote and a page; the fact-check verdict rides on the row as <field>_check instead of only in verify_*.csv; catalogue and code-derived values carry a _provenance string so no QC hover is ever blank. v2.6 (29 Sep 2026): result values keep their decimals (3.6 stays 3.6, 12.5 stays 12.5); v2.5 (28 Sep 2026): headline results rule (reach, physical, effect; eligibility, category, beneficiary anchor); v2.4: money as plain digits, rationale is the reason not the achievement; v2.3: national bodies carry their country; v2.2 (Charity pilot): planned closing and template dates excluded, AfDB numbers and unit codes; v2.1: countries, explicit start; v2.0: one module per document
 # family (R/05_extract/families/*.R). The shared prompt keeps only the rules
 # that hold for every family; each module adds where its fields sit, what its
 # results table's columns are called, its actor roles, its currency and its
@@ -86,6 +86,7 @@ if (length(args) == 1 && grepl("\\.csv$", args[1])) {
 full <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
 REPO <- if (length(full)) normalizePath(file.path(dirname(sub("^--file=", "", full[1])), "..", "..")) else getwd()
 OUT_DIR <- Sys.getenv("EXTRACT_OUT_DIR", file.path(REPO, "outputs", "extraction"))
+source(file.path(REPO, "R", "00_shared", "paths.R"))          # safe_name(): project codes are not filename-safe
 source(file.path(REPO, "R", "00_shared", "clean_fields.R"))
 source(file.path(REPO, "R", "00_shared", "results_rank.R"))   # choose_headline(): the three headline results
 source(file.path(REPO, "R", "00_shared", "rf_table.R"))
@@ -221,6 +222,14 @@ SYSTEM <- paste(
 pg <- function() type_array(items = type_integer(),
   description = "Page numbers ([page N]) where this information was found.")
 
+# A page for ONE field, so a checker lands on the line instead of a range.
+# The group's source_pages still covers the whole answer; this says which of
+# those pages carries this particular value. 0 when the value is not in the
+# document (nothing stated, or it was derived rather than read).
+pg1 <- function(what) type_integer(paste0(
+  "Page number ([page N]) carrying ", what,
+  ". A single page, not a range. 0 if the field is empty or not stated."))
+
 GROUPS <- list(
 
 identity = list(
@@ -231,12 +240,23 @@ identity = list(
     project_lead_name = type_string("NAME of the ORGANISATION leading the project, as the document names it (often the implementing agency or publisher; the family note names the role). Never an internal department, global practice, division or regional unit of an organisation — name the organisation itself. An organisation that both commissions and delivers the work is the lead AND an implementor: record it in both places. A NATIONAL body (ministry, department, directorate, agency, authority, government, national institute or fund) is written WITH ITS COUNTRY after a comma, the way the registry writes it: 'Ministry of Agriculture and Food Security, Malawi', 'Environment Protection Agency, Sierra Leone', 'Government of Mozambique'. Take the country the project is implemented in; never leave a national body without its country, and never invent one for an international organisation."),
     publication_year = type_string("Year the source document was published (front page, 'Date of report', submission date). NEVER a template or form version date printed in a header or footer, such as 'GEF 7 Core Indicators, March 2019 (revised)' or 'Version 2.1, 2018'. Empty if the document carries no date of its own."),
     start_year     = type_string("Year the project ACTUALLY started per the document. Look in the dates block the family note names (Key Dates, Project data, Project Information Table, Relevant Dates): 'Approval', 'Effectiveness', 'entry into force', 'signature', 'officially launched', French 'mise en vigueur'. Never design/concept/endorsement years, and NEVER an extension approval or revised-closing decision date. If no formal date is stated but the document gives an explicit implementation period ('implemented between 2017 and 2022'), use its first year. A prose statement of when work began also counts: 'under implementation since 2018', 'running since 2018', 'operational since 2018'. Empty only if none of these is stated."),
-    start_year_evidence = type_string("Short exact quote stating the start (e.g. 'Approval 29-Apr-2014', 'Effectiveness date: 12 March 2017'), with its wording unchanged. An implementation period alone ('implemented between 2017 and 2022') is NOT a start statement: leave start_year and this field empty and put the period in implementation_period."),
+    start_year_quote = type_string("Short exact quote stating the start (e.g. 'Approval 29-Apr-2014', 'Effectiveness date: 12 March 2017'), with its wording unchanged. An implementation period alone ('implemented between 2017 and 2022') is NOT a start statement: leave start_year and this field empty and put the period in implementation_period."),
+    start_year_page = pg1("the start statement quoted above"),
     closure_year   = type_string("Year the project ACTUALLY closed ('actual closing', 'completed in'; the last year of an explicit implementation period counts if the project is described as finished). NEVER a planned, expected, original or revised closing date of a project still under implementation (interim and mid-term evaluations, progress reports): leave empty then. Empty if still running ('to date') or not stated."),
-    closure_year_evidence = type_string("Short exact quote stating the closing."),
+    closure_year_quote = type_string("Short exact quote stating the closing."),
+    closure_year_page = pg1("the closing statement quoted above"),
     implementation_period = type_string("The implementation period exactly as the document states it, e.g. '2017-2022' or 'implemented between 2017 and 2022', if any such statement exists. Empty otherwise."),
     document_type_stated = type_string("The document's OWN designation of itself, verbatim (e.g. 'Implementation Completion and Results Report', 'Project Performance Evaluation Report', 'Mid-term evaluation of the project ...')."),
     resource_id    = type_string("The DOCUMENT's own report/document number as printed, in the form the family note gives. NEVER a grant, loan or trust-fund account number (TF-..., IDA-..., 2100155...), never internal department/routing codes (RDGW/AHAI), never bare date codes. Empty if none."),
+    # one page per field, so a checker lands on the line rather than on the
+    # group's page range
+    project_title_page    = pg1("the project title as printed"),
+    project_id_page       = pg1("the project identifier"),
+    project_lead_page     = pg1("the naming of the lead organisation"),
+    publication_year_page = pg1("the document's own date"),
+    implementation_period_page = pg1("the implementation period statement"),
+    document_type_page    = pg1("the document's designation of itself"),
+    resource_id_page      = pg1("the report/document number"),
     source_pages   = pg())),
 
 geography = list(
@@ -264,6 +284,8 @@ geography = list(
       "that contradicts location_count without explaining the difference.",
       "If the project also worked outside Africa, add",
       "'total of X international locations, of which Y African' after the quote.")),
+    scope_page          = pg1("the scope statement quoted in scope_stated"),
+    location_notes_page = pg1("the verbatim passage quoted in location_notes"),
     source_pages   = pg())),
 
 rationale = list(
@@ -318,6 +340,8 @@ rationale = list(
       "If no passage shows who benefited, leave this EMPTY rather than assume.")),
     target_beneficiary_page = type_integer("Page of that quote."),
     GESI_project = type_string("Summary of gender-equality and social-inclusion content as presented (management, design, results, disaggregation, indigenous communities, local knowledge). If the document says nothing about gender or social inclusion, write exactly: The document does not address gender equality or social inclusion. Never leave this empty."),
+    GESI_project_quote = type_string("Short exact quote from the document's own gender or social-inclusion text, so the summary above can be checked against a page. Empty when the document says nothing on the subject."),
+    GESI_project_page = pg1("the gender or social-inclusion passage quoted above"),
     source_pages = pg())),
 
 results = list(
@@ -407,6 +431,18 @@ finance = list(
     budget_total = type_string("Total PLANNED budget: the financing-plan or identification-block TOTAL across ALL sources (lead fund grant/credit + co-financing + government counterpart + beneficiary in-kind). Typical table rows: the lead fund's grant or credit, 'Government', 'Co-financing', 'TOTAL'. NEVER the amount spent/executed - that is disbursed, a different field. Digits only, EXPANDED to full units: 'UA 1.71 million' -> 1710000. Write the number as PLAIN DIGITS: 33000000, never '33,000,000', never '33 million', never scientific notation such as 3.3e+07."),
     budget_lead_share = type_string("The lead funder's / main envelope alone (the lead funder the family note names), digits only, expanded to full units, plain digits (30000000, never 3e+07 or '30 million'). Empty if same as budget_total."),
     disbursed    = type_string("Total actually SPENT/disbursed: look for 'actual disbursed', 'actual at closing', 'total spent', 'expenditure', execution tables, French 'decaisse'. Sum ALL sources actually spent when several are stated. Not commitments, not the plan. The identification block wins on contradictions (flag them in finance_notes). Digits only, expanded to full units (1.39 million -> 1390000), plain digits, never scientific notation."),
+    # The three figures above are EXPANDED to full units, so the number written
+    # ("1710000") appears nowhere in the document ("UA 1.71 million") and the
+    # fact-check cannot match it. These carry the document's own wording so the
+    # value stays checkable by machine and by a human reading the page.
+    budget_total_stated      = type_string("The total budget EXACTLY as the document prints it, wording and separators unchanged: 'UA 1.71 million', 'US$ 33,000,000', '33 millions de dollars'. This is the string a reader would find on the page; budget_total is the same figure expanded to digits. Empty if budget_total is empty."),
+    budget_lead_share_stated = type_string("The lead funder's envelope EXACTLY as printed, wording and separators unchanged. Empty if budget_lead_share is empty."),
+    disbursed_stated         = type_string("The amount spent/disbursed EXACTLY as printed, wording and separators unchanged. Empty if disbursed is empty."),
+    budget_total_page        = pg1("the total budget figure"),
+    budget_lead_share_page   = pg1("the lead funder's envelope"),
+    disbursed_page           = pg1("the disbursed figure"),
+    currency_page            = pg1("the currency as printed"),
+    instrument_page          = pg1("the financing instrument wording"),
     currency     = type_string("ISO currency code, e.g. 'USD', 'EUR', 'UA'."),
     instrument_stated = type_string("EXACT wording of the financing instrument(s) from the title page or financing table, verbatim (the family note says where it is printed)."),
     funding_mechanism_portion = type_string("INSTRUMENT-TYPE mix (grant/loan/investment/other — never fund or account names) WITH PERCENTAGES in parentheses joined by ' + ', per the template format: 'grant (40%) + loan (40%) + other-in-kind contribution (20%)'. Compute percentages from stated amounts when the document gives amounts but no percentages. Empty if the split cannot be established."),
@@ -514,6 +550,11 @@ fold_results <- function(res, row, pages_txt = NULL) {
   row$results_all_n <- as.character(length(rl))
   # evidence_depth derived deterministically (protocol: 2 = results evidence)
   row$evidence_depth <- if (length(rl)) "2" else "1"
+  # derived in code, so there is no page: say so rather than leave the QC
+  # hover empty
+  row$evidence_depth_provenance <- if (length(rl))
+    paste0("derived in code: ", length(rl), " result(s) found in the document, so depth 2")
+    else "derived in code: no results found in the document, so depth 1"
   row
 }
 
@@ -572,28 +613,74 @@ check_name <- function(name, pages_txt) {   # actor names: anywhere in the doc
   "NOT FOUND"
 }
 
+# Returns BOTH the long audit frame (document/item/status, written to
+# verify_*.csv as before) and a named list of <field>_check values folded onto
+# the extraction row. The row is what the QC workbooks read, so a verdict has
+# to travel with its value instead of sitting in a second file joined on a
+# free-text label.
 verify_doc <- function(row, raw, pages_txt, doc) {
   as_pages <- function(x) { p <- suppressWarnings(as.integer(unlist(x))); p[!is.na(p)] }
   v <- list()
-  add <- function(item, status) v[[length(v) + 1]] <<- data.frame(
-    document = doc, item = item, status = status, stringsAsFactors = FALSE)
-  add("project_lead_name", check_name(raw$identity$project_lead_name, pages_txt))
-  for (nm in unlist(raw$finance$funder_names))
-    add(paste0("funder: ", substr(nm, 1, 40)), check_name(nm, pages_txt))
-  for (nm in unlist(raw$finance$implementor_names))
-    add(paste0("implementor: ", substr(nm, 1, 40)), check_name(nm, pages_txt))
+  chk <- list()
+  # `field` names the row column this verdict belongs to; NULL means the item
+  # is one of many for a field (an array name) and is folded in below.
+  add <- function(item, status, field = NULL) {
+    v[[length(v) + 1]] <<- data.frame(
+      document = doc, item = item, status = status, stringsAsFactors = FALSE)
+    if (!is.null(field)) chk[[paste0(field, "_check")]] <<- status
+  }
+  # one verdict for a whole array: the worst wins, plus how many names failed
+  fold_arr <- function(field, statuses) {
+    statuses <- statuses[nzchar(statuses) & statuses != "skipped"]
+    chk[[paste0(field, "_check")]] <<-
+      if (!length(statuses)) "skipped"
+      else if (any(statuses == "NOT FOUND")) "NOT FOUND"
+      else if (any(statuses == "found_other_page")) "found_other_page"
+      else "verified"
+    chk[[paste0(field, "_check_failed")]] <<- sum(statuses == "NOT FOUND")
+  }
+  add("project_lead_name", check_name(raw$identity$project_lead_name, pages_txt),
+      "project_lead_name")
+  fst <- character(0)
+  for (nm in unlist(raw$finance$funder_names)) {
+    s <- check_name(nm, pages_txt); fst <- c(fst, s)
+    add(paste0("funder: ", substr(nm, 1, 40)), s)
+  }
+  fold_arr("funder_names", fst)
+  ist <- character(0)
+  for (nm in unlist(raw$finance$implementor_names)) {
+    s <- check_name(nm, pages_txt); ist <- c(ist, s)
+    add(paste0("implementor: ", substr(nm, 1, 40)), s)
+  }
+  fold_arr("implementor_names", ist)
   idp <- as_pages(raw$identity$source_pages)
-  add("project_id",  check_value(raw$identity$project_id, idp, pages_txt))
-  add("resource_id", check_quote(raw$identity$resource_id, idp, pages_txt))
-  add("start_year_evidence",   check_quote(raw$identity$start_year_evidence, idp, pages_txt))
-  add("closure_year_evidence", check_quote(raw$identity$closure_year_evidence, idp, pages_txt))
-  add("document_type_stated",  check_quote(raw$identity$document_type_stated, idp, pages_txt))
+  pg_or <- function(x, fallback) { p <- as_pages(x); if (length(p) && p[1] > 0) p else fallback }
+  add("project_id",  check_value(raw$identity$project_id,
+      pg_or(raw$identity$project_id_page, idp), pages_txt), "project_id")
+  add("resource_id", check_quote(raw$identity$resource_id,
+      pg_or(raw$identity$resource_id_page, idp), pages_txt), "resource_id")
+  add("start_year_quote",   check_quote(raw$identity$start_year_quote,
+      pg_or(raw$identity$start_year_page, idp), pages_txt), "start_year")
+  add("closure_year_quote", check_quote(raw$identity$closure_year_quote,
+      pg_or(raw$identity$closure_year_page, idp), pages_txt), "closure_year")
+  add("document_type_stated",  check_quote(raw$identity$document_type_stated,
+      pg_or(raw$identity$document_type_page, idp), pages_txt), "document_type_stated")
+  add("project_title", check_quote(raw$identity$project_title,
+      pg_or(raw$identity$project_title_page, idp), pages_txt), "project_title")
   add("scope_stated", check_quote(raw$geography$scope_stated,
-      as_pages(raw$geography$source_pages), pages_txt))
+      pg_or(raw$geography$scope_page, as_pages(raw$geography$source_pages)), pages_txt),
+      "scope_stated")
   tbp <- as_pages(raw$rationale$target_beneficiary_page)
   if (!length(tbp)) tbp <- as_pages(raw$rationale$source_pages)
   add("target_beneficiary_stated",
-      check_quote(raw$rationale$target_beneficiary_stated, tbp, pages_txt))
+      check_quote(raw$rationale$target_beneficiary_stated, tbp, pages_txt),
+      "target_beneficiary_stated")
+  # GESI is a summary, not a quote, so the quote beside it is what gets checked
+  gq <- as.character(raw$rationale$GESI_project_quote %||% "")
+  if (nzchar(gq))
+    add("GESI_project_quote", check_quote(gq,
+        pg_or(raw$rationale$GESI_project_page, as_pages(raw$rationale$source_pages)),
+        pages_txt), "GESI_project")
   # the rationale must be the document's own words, so it is checked like any
   # other quote; each ' ... '-joined part is checked separately
   rp <- as_pages(raw$rationale$rationale_project_page)
@@ -607,11 +694,26 @@ verify_doc <- function(row, raw, pages_txt, doc) {
     add("rationale_project",
         if (all(st %in% c("verified", "verified_tokens (table)"))) "verified"
         else if (any(st == "NOT FOUND")) "NOT FOUND"
-        else st[1])
+        else st[1], "rationale_project")
   }
   fnp <- as_pages(raw$finance$source_pages)
-  add("budget_total", check_value(raw$finance$budget_total, fnp, pages_txt))
-  add("disbursed",    check_value(raw$finance$disbursed, fnp, pages_txt))
+  # The money fields are expanded to full units, so the digits on the row are
+  # not the string on the page. Check the document's own wording instead, and
+  # fall back to the digits when no wording came back.
+  money <- function(field, stated_field, page_field) {
+    stated <- as.character(raw$finance[[stated_field]] %||% "")
+    pgs <- pg_or(raw$finance[[page_field]], fnp)
+    st <- if (nzchar(stated)) check_quote(stated, pgs, pages_txt)
+          else check_value(raw$finance[[field]], pgs, pages_txt)
+    add(field, st, field)
+  }
+  money("budget_total",      "budget_total_stated",      "budget_total_page")
+  money("budget_lead_share", "budget_lead_share_stated", "budget_lead_share_page")
+  money("disbursed",         "disbursed_stated",         "disbursed_page")
+  add("currency", check_quote(raw$finance$currency,
+      pg_or(raw$finance$currency_page, fnp), pages_txt), "currency")
+  add("instrument_stated", check_quote(raw$finance$instrument_stated,
+      pg_or(raw$finance$instrument_page, fnp), pages_txt), "instrument_stated")
   rl <- raw$results$results
   if (is.data.frame(rl)) rl <- lapply(seq_len(nrow(rl)), function(i) as.list(rl[i, ]))
   for (i in seq_along(rl)) {
@@ -619,7 +721,16 @@ verify_doc <- function(row, raw, pages_txt, doc) {
     add(paste0("result_", i, ": ", substr(r$metric_stated, 1, 40)),
         check_value(r$value, as_pages(r$page), pages_txt))
   }
-  do.call(rbind, v)
+  # Results are checked again against the THREE FOLDED SLOTS. The loop above
+  # walks the document's own order, while choose_headline() decides which three
+  # reach the row, so result_2 in the audit frame is not result2 on the row.
+  for (i in 1:3) {
+    val <- row[[paste0("result", i)]]
+    if (is.null(val) || !nzchar(as.character(val)[1])) next
+    chk[[paste0("result", i, "_check")]] <-
+      check_value(val, as_pages(row[[paste0("result", i, "_page")]]), pages_txt)
+  }
+  list(long = do.call(rbind, v), checks = chk)
 }
 
 # -------------------------------------------------------------- extraction --
@@ -710,8 +821,8 @@ extract_doc <- function(pdf_path, focus = "", pcode = "", family = "", groups = 
     }
     cat(sprintf("  %-10s ok (%ss)\n", gname, secs))
     raw[[gname]] <- res
-    write_json(res, file.path(RAW_DIR, paste0("s1_", if (nzchar(pcode)) paste0(pcode, "_") else "", substr(doc_name, 1, 55),
-               "_", gname, ".json")), auto_unbox = TRUE, pretty = TRUE)   # project code first: focus projects sharing one document no longer overwrite each other
+    write_json(res, file.path(RAW_DIR, paste0("s1_", if (nzchar(pcode)) paste0(safe_name(pcode), "_") else "", substr(doc_name, 1, 55),
+               "_", gname, ".json")), auto_unbox = TRUE, pretty = TRUE)   # project code first: focus projects sharing one document no longer overwrite each other; safe_name() because a corpus code carries a "source:" prefix and a colon cannot go in a Windows path
     if (gname == "results") { row <- fold_results(res, row, doc$pages); next }
     for (f in names(res)) {
       vv <- res[[f]]
@@ -765,10 +876,16 @@ extract_doc <- function(pdf_path, focus = "", pcode = "", family = "", groups = 
   if (!is.null(DOC_INDEX)) {
     ixr <- DOC_INDEX[DOC_INDEX$filename == basename(pdf_path), ]
     if (nrow(ixr) == 1 && ixr$match_method != "unmatched") {
+      # A catalogue value did not come off a page, so there is no quote and no
+      # page to cite. Record where it DID come from, so the QC workbook can
+      # show provenance instead of an empty hover, and nothing is invented.
+      prov <- paste0("from the ", ixr$source, " catalogue (match: ",
+                     ixr$match_method, ")")
       stash <- function(field, val) {
         if (nzchar(val)) {
           row[[paste0(field, "_extracted")]] <<- gv(row[[field]])
           row[[field]] <<- val
+          row[[paste0(field, "_provenance")]] <<- prov
         }
       }
       # The World Bank and GEF catalogues name the PROJECT; the Adaptation
@@ -780,9 +897,12 @@ extract_doc <- function(pdf_path, focus = "", pcode = "", family = "", groups = 
       else if (nzchar(ixr$title)) row$project_title_catalogue <- ixr$title
       stash("project_id", ixr$project_id)
       stash("resource_id", ixr$report_no)
-      if (!nzchar(gv(row$publication_year)) && nzchar(ixr$year) && ixr$year != "NA")
+      if (!nzchar(gv(row$publication_year)) && nzchar(ixr$year) && ixr$year != "NA") {
         row$publication_year <- ixr$year
+        row$publication_year_provenance <- prov
+      }
       row$reference_link_1 <- ixr$url
+      row$reference_link_1_provenance <- prov
       row$prefill <- ixr$match_method
       cat("  prefill    from catalogue (", ixr$match_method, ")\n")
     }
@@ -802,7 +922,7 @@ extract_doc <- function(pdf_path, focus = "", pcode = "", family = "", groups = 
         row$start_year_flag <- paste0("start year not stated explicitly; implementation period only (", per, "): QC to decide")
       if (length(yrs) >= 2 && !nzchar(gv(row$closure_year))) {
         row$closure_year <- as.character(max(yrs))
-        row$closure_year_evidence <- paste0("derived from implementation period: ", per)
+        row$closure_year_quote <- paste0("derived from implementation period: ", per)
       }
     }
   }
@@ -822,7 +942,7 @@ extract_doc <- function(pdf_path, focus = "", pcode = "", family = "", groups = 
   cy <- suppressWarnings(as.integer(gv(row$closure_year)))
   if (!is.na(py) && !is.na(cy) && cy > py) {
     row$closure_year_flag <- paste0("closing ", cy, " is later than the report (", py, "): a planned date, not the actual closing; left empty")
-    row$closure_year <- ""; row$closure_year_evidence <- ""
+    row$closure_year <- ""; row$closure_year_quote <- ""
   }
   # year sanity check (template: only 2000-2025 accepted)
   for (yf in c("publication_year", "start_year", "closure_year")) {
@@ -866,8 +986,11 @@ extract_doc <- function(pdf_path, focus = "", pcode = "", family = "", groups = 
   }
   ver <- tryCatch(verify_doc(row, raw, doc$pages, basename(pdf_path)),
                   error = function(e) { warning("verify failed: ", conditionMessage(e)); NULL })
+  # the verdicts ride on the row, so nothing downstream has to rejoin
+  # verify_*.csv on a free-text label
+  for (k in names(ver$checks)) row[[k]] <- as.character(ver$checks[[k]])
   list(row = as.data.frame(row, stringsAsFactors = FALSE, check.names = FALSE),
-       verify = ver)
+       verify = ver$long)
 }
 
 if (MODE == "probe") GROUPS <- GROUPS["identity"]

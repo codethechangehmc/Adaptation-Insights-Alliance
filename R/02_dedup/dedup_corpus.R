@@ -20,8 +20,8 @@
 # ICR says GEF co-financed it). Report only: nothing is moved or deleted.
 #
 #   Rscript R/02_dedup/dedup_corpus.R
-#   -> 04_Extraction_Results/review/duplicates.csv        aliases to skip
-#      04_Extraction_Results/review/project_clusters.csv  for the protocol call
+#   -> 04_Screening/inputs/decisions/duplicates.csv        aliases to skip
+#      04_Screening/inputs/reports/project_clusters.csv  for the protocol call
 
 full <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
 REPO <- normalizePath(file.path(dirname(sub("^--file=", "", full[1])), "..", ".."),
@@ -29,9 +29,9 @@ REPO <- normalizePath(file.path(dirname(sub("^--file=", "", full[1])), "..", "..
 source(file.path(REPO, "R", "00_shared", "paths.R"))
 source(file.path(REPO, "R", "00_shared", "doc_families.R"))
 
-CENSUS <- file.path(REVIEW_DIR, "family_census.csv")
-OUT_D  <- file.path(REVIEW_DIR, "duplicates.csv")
-OUT_P  <- file.path(REVIEW_DIR, "project_clusters.csv")
+CENSUS <- file.path(SCREEN_DIR, "inputs", "decisions", "family_census.csv")
+OUT_D  <- file.path(SCREEN_DIR, "inputs", "decisions", "duplicates.csv")
+OUT_P  <- file.path(SCREEN_DIR, "inputs", "reports", "project_clusters.csv")
 stopifnot(file.exists(CENSUS))
 
 cen <- read.csv(CENSUS, stringsAsFactors = FALSE, colClasses = "character")

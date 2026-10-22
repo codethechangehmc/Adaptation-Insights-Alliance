@@ -31,7 +31,7 @@ mark_duplicates <- function(existing, keymap) {
               af = "afdoc:", cif = "cifdoc:")
 
   # which copy was kept, from the dedup report, for the duplicate-of tag
-  reg <- file.path(GL, "04_Extraction_Results", "review", "duplicates.csv")
+  reg <- file.path(GL, "04_Screening", "inputs", "decisions", "duplicates.csv")
   kept_of <- if (file.exists(reg)) {
     a <- read.csv(reg, stringsAsFactors = FALSE, colClasses = "character")
     setNames(paste0(a$keep_source, "/", a$keep_file), paste0(a$drop_source, "__", a$drop_file))
@@ -129,7 +129,7 @@ mark_duplicates <- function(existing, keymap) {
     cli_alert_success("patched {length(patches)} items")
   }
   if (length(log)) {
-    lp <- file.path(GL, "04_Extraction_Results", "review", "zotero_duplicates_log.csv")
+    lp <- file.path(GL, "04_Screening", "inputs", "reports", "zotero_duplicates_log.csv")
     readr::write_csv(bind_rows(log), lp)
     cli_alert_info("log: {lp}")
   }

@@ -35,7 +35,7 @@ rd <- function(f) {
 
 # the harmoniser writes its proposals beside the run; the team's copy lives
 # in review/. Audit whichever is newer, so this works either way round.
-cands <- c(file.path(REVIEW_DIR, "proposed_new_actors.csv"),
+cands <- c(file.path(VOCAB_DIR, "proposed_new_actors.csv"),
            file.path(REPO, "outputs", "extraction", "proposed_new_actors.csv"))
 cands <- cands[file.exists(cands)]
 if (!length(cands)) { cat("no proposed_new_actors.csv - nothing to audit\n"); quit(save = "no") }
@@ -145,7 +145,7 @@ out <- out[order(out$audit_verdict == "NEW - needs a code", out$actor_name), ]
 cat("verdicts over", nrow(p), "proposals:\n")
 print(table(verdict))
 
-f_out <- file.path(REVIEW_DIR, "proposed_new_actors_AUDIT.xlsx")
+f_out <- file.path(VOCAB_DIR, "proposed_new_actors_AUDIT.xlsx")
 wb <- createWorkbook(); addWorksheet(wb, "proposed_actors")
 writeData(wb, "proposed_actors", out, withFilter = TRUE,
           headerStyle = createStyle(textDecoration = "bold", fgFill = "#EEEEEE"))

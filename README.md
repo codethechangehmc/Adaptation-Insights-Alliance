@@ -66,7 +66,7 @@ time. It does not hold documents, model outputs, or team documents.
 | `docs/AI_Extraction_Protocol.md` the extraction protocol text | Team documents: protocol Word files, the extraction template, the QC question list, the knowledge base (`00_Knowledge`, twelve short explanatory notes) |
 | `CLAUDE.md` and `.claude/` working rules for AI coding sessions | API keys (`.Renviron`, ignored by git) |
 
-On the project's OneDrive the repo is the folder `05_Pipeline`, and the
+On the project's OneDrive the repo is the folder `07_Pipeline`, and the
 scripts expect its neighbours to be there:
 
 ```
@@ -75,8 +75,8 @@ Grey Literature/
   01_Protocol/             protocol, workflow diagram, document families, QC questions
   02_Template/             the extraction template (Excel) and its readme sheet
   03_Documents/            the corpus: one folder per funder, plus pilot/ and duplicates/
-  04_Extraction_Results/   what people open: results, review lists, scores
-  05_Pipeline/             this repo
+  05_Extraction_Results/   what people open: results, review lists, scores
+  07_Pipeline/             this repo
 ```
 
 `R/00_shared/paths.R` is the single place that knows this layout. Every
@@ -213,7 +213,7 @@ its score is the honest one.
 
 | Script | What it is |
 |---|---|
-| `export_results.R` | Publishes the newest run into `04_Extraction_Results` as Excel workbooks in the template's column order, with a sheet of rows that need a human look. |
+| `export_results.R` | Publishes the newest run into `05_Extraction_Results` as Excel workbooks in the template's column order, with a sheet of rows that need a human look. |
 | `export_reference.R` | Publishes the gold set reference extractions. |
 | `cost_report.R` | What the extraction has cost and what the corpus would cost, from measured prompt sizes. |
 | `prompt_history.R` | Every version of every prompt, with the actual text sent. |
@@ -365,8 +365,8 @@ gpt-5-mini for extraction and harmonisation and gpt-5-nano for screening);
 `EXTRACT_OUT_DIR` redirects run outputs.
 
 **Folders.** The scripts expect the OneDrive layout in section 2. Nothing
-needs to be configured if the repo sits in `05_Pipeline` next to
-`03_Documents` and `04_Extraction_Results`.
+needs to be configured if the repo sits in `07_Pipeline` next to
+`03_Documents` and `05_Extraction_Results`.
 
 **Windows note.** Some corpus paths are longer than 260 characters. The
 scripts handle this themselves; if you open a file another way, use the
@@ -402,7 +402,7 @@ Rscript R/06_harmonise/harmonize.R                    # newest Session 1 output
 # 8 and 9 score and publish
 Rscript R/08_quality/test_regressions.R               # regression cases, run before harmonising
 Rscript R/08_quality/score_pilot.R                    # against the gold set
-Rscript R/09_publish/export_results.R                 # workbooks into 04_Extraction_Results
+Rscript R/09_publish/export_results.R                 # workbooks into 05_Extraction_Results
 Rscript R/09_publish/cost_report.R
 ```
 
@@ -424,15 +424,15 @@ doubles.
 
 | What | Where |
 |---|---|
-| The screening file: one row per judged document with verdict, reason, quotes, family, and the ruled verdict beside the model's | `04_Extraction_Results/review/scope_screen.csv` |
-| The queue for a person: unsure documents with the reason | `04_Extraction_Results/review/scope_screen_unsure.csv` |
-| A person's decisions, which win over the rules | `04_Extraction_Results/review/scope_screen_overrides.csv` |
-| The census and the duplicate report | `04_Extraction_Results/review/family_census.csv`, `duplicates.csv`, `project_clusters.csv` |
+| The screening file: one row per judged document with verdict, reason, quotes, family, and the ruled verdict beside the model's | `05_Extraction_Results/review/scope_screen.csv` |
+| The queue for a person: unsure documents with the reason | `05_Extraction_Results/review/scope_screen_unsure.csv` |
+| A person's decisions, which win over the rules | `05_Extraction_Results/review/scope_screen_overrides.csv` |
+| The census and the duplicate report | `05_Extraction_Results/review/family_census.csv`, `duplicates.csv`, `project_clusters.csv` |
 | Duplicates taken out, with the register | `03_Documents/duplicates/` |
-| Proposed new actors, locations and vocabulary terms | `04_Extraction_Results/review/` |
-| The latest extraction in template shape | `04_Extraction_Results/extracted_records_latest.xlsx`, `location_records_latest.xlsx` |
-| Scores per run | `04_Extraction_Results/scores/` |
-| Raw run outputs and the verification report | `05_Pipeline/outputs/extraction/` |
+| Proposed new actors, locations and vocabulary terms | `05_Extraction_Results/review/` |
+| The latest extraction in template shape | `05_Extraction_Results/extracted_records_latest.xlsx`, `location_records_latest.xlsx` |
+| Scores per run | `05_Extraction_Results/scores/` |
+| Raw run outputs and the verification report | `07_Pipeline/outputs/extraction/` |
 | The catalogue | Zotero group library, one collection per funder with included, to screen, screened out and duplicates |
 
 ## 9. Where the work stands

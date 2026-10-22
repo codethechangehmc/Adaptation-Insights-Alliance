@@ -15,14 +15,14 @@
 # report say which). Sourced by zotero_upload.R after items exist.
 
 adopt_pulled <- function(existing) {
-  reg_p <- file.path(GL, "04_Extraction_Results", "review", "zotero_pulled.csv")
+  reg_p <- file.path(GL, "04_Screening", "inputs", "reports", "zotero_pulled.csv")
   if (!file.exists(reg_p)) return(invisible(0))
   reg <- read.csv(reg_p, stringsAsFactors = FALSE, colClasses = "character")
   reg <- reg[reg$status %in% c("pulled", "in_corpus"), ]   # in_corpus: bytes already in the corpus, filename = that corpus file
   if (!nrow(reg)) return(invisible(0))
 
   # a dropped duplicate points at the kept copy
-  dup_p <- file.path(GL, "04_Extraction_Results", "review", "duplicates.csv")
+  dup_p <- file.path(GL, "04_Screening", "inputs", "decisions", "duplicates.csv")
   kept_of <- character(0)
   if (file.exists(dup_p)) {
     d <- read.csv(dup_p, stringsAsFactors = FALSE, colClasses = "character")
@@ -69,7 +69,7 @@ adopt_pulled <- function(existing) {
     cli_alert_success("placed {length(patches)} attachments")
   }
   if (length(log)) {
-    lp <- file.path(GL, "04_Extraction_Results", "review", "zotero_adopt_pulled_log.csv")
+    lp <- file.path(GL, "04_Screening", "inputs", "reports", "zotero_adopt_pulled_log.csv")
     readr::write_csv(bind_rows(log), lp); cli_alert_info("log: {lp}")
   }
   invisible(length(patches))

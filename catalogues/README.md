@@ -26,5 +26,5 @@ Rscript R/04_catalogue/sync_metadata.R
 | `vocab_decisions.csv` | Every harmonisation decision (field, option list fingerprint, extract, choice). Reused on rerun so results are reproducible. A person can correct a row. |
 | `actor_synonyms.csv` | Organisation names as documents write them, each pointing at exactly one actor code. |
 | `actor_website_harvest.csv` | What each organisation's own website says about its name. |
-| `corpus_screen.csv` | An older folder label check, kept for reference. The live screening file is `04_Extraction_Results/review/scope_screen.csv`. |
+| `corpus_screen.csv` | An older folder label check, kept for reference. The live screening file is `05_Extraction_Results/review/scope_screen.csv`. |
 | `zotero_duplicate_report.csv` | An older duplicate report for the Zotero library. |

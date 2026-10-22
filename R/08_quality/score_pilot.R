@@ -21,8 +21,15 @@ OUT_DIR <- Sys.getenv("EXTRACT_OUT_DIR", file.path(REPO, "outputs", "extraction"
 
 args <- commandArgs(trailingOnly = TRUE)
 hfile <- if (length(args)) args[1] else {
-  f <- list.files(OUT_DIR, pattern = "^harmonized_diagnostics_.*\\.csv$", full.names = TRUE)
-  stopifnot("no harmonized_diagnostics_*.csv found" = length(f) > 0)
+  # Since 30 Sep 2026 harmonise writes ONE file carrying the template columns
+  # and the evidence together, so the scorer reads that. Older runs left a
+  # separate harmonized_diagnostics_* twin; fall back to it so historical runs
+  # still score.
+  f <- list.files(OUT_DIR, pattern = "^harmonized_.*\\.csv$", full.names = TRUE)
+  f <- f[!grepl("^harmonized_diagnostics_", basename(f))]
+  if (!length(f))
+    f <- list.files(OUT_DIR, pattern = "^harmonized_diagnostics_.*\\.csv$", full.names = TRUE)
+  stopifnot("no harmonized_*.csv found" = length(f) > 0)
   f[which.max(file.mtime(f))]
 }
 cat("scoring:", hfile, "\n")
@@ -274,7 +281,7 @@ sc$why <- mapply(why_fail, sc$field, sc$gold, sc$extracted, sc$verdict,
 ruled <- mapply(adj_why, sc$project, sc$field, USE.NAMES = FALSE)
 sc$why <- ifelse(nzchar(ruled), ruled, sc$why)
 
-stamp <- sub("^harmonized_diagnostics_", "", sub("\\.csv$", "", basename(hfile)))
+stamp <- sub("^harmonized_(diagnostics_)?", "", sub("\\.csv$", "", basename(hfile)))
 out <- file.path(OUT_DIR, paste0("score_", stamp, ".csv"))
 write_csv(sc, out)
 

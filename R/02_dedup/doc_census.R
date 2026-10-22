@@ -18,7 +18,7 @@
 #   Rscript R/02_dedup/doc_census.R                      new files only
 #   Rscript R/02_dedup/doc_census.R --source=gef --refresh
 #   Rscript R/02_dedup/doc_census.R --redetect           rules changed
-#   -> 04_Extraction_Results/review/family_census.csv
+#   -> 04_Screening/inputs/decisions/family_census.csv
 
 suppressPackageStartupMessages({ library(pdftools); library(qpdf) })
 
@@ -36,7 +36,7 @@ opt <- function(name, default = "") {
 SRC      <- opt("source")
 REFRESH  <- any(args == "--refresh")
 REDETECT <- any(args == "--redetect")
-OUT      <- file.path(REVIEW_DIR, "family_census.csv")
+OUT      <- file.path(SCREEN_DIR, "inputs", "decisions", "family_census.csv")
 HEADS    <- file.path(REPO, "outputs", "census_heads.rds")
 dir.create(dirname(HEADS), recursive = TRUE, showWarnings = FALSE)
 heads <- if (file.exists(HEADS)) readRDS(HEADS) else list()

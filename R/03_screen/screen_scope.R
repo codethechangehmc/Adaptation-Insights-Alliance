@@ -44,7 +44,7 @@
 #
 #   Rscript R/03_screen/screen_scope.R              all sources
 #   Rscript R/03_screen/screen_scope.R --source=cif --limit=20
-#   -> 04_Extraction_Results/review/scope_screen.csv   (resumable; appends)
+#   -> 04_Screening/scope_screen.csv   (resumable; appends)
 ##############################################################################
 
 suppressPackageStartupMessages({ library(ellmer); library(pdftools) })
@@ -54,6 +54,7 @@ REPO <- normalizePath(file.path(dirname(sub("^--file=", "", full[1])), "..", "..
                       mustWork = TRUE)
 source(file.path(REPO, "R", "00_shared", "paths.R"))
 source(file.path(REPO, "R", "00_shared", "doc_families.R"))
+source(file.path(REPO, "R", "03_screen", "screen_text.R"))   # extraction + deterministic pre-pass
 
 if (!nzchar(Sys.getenv("OPENAI_API_KEY")))
   for (.p in c(file.path(Sys.getenv("OneDrive"), "Documents", ".Renviron"),
@@ -70,9 +71,9 @@ opt    <- function(n, d = "") {
 }
 SRC    <- opt("source")
 LIMIT  <- suppressWarnings(as.integer(opt("limit", "0")))
-OUT    <- file.path(REVIEW_DIR, opt("out", "scope_screen.csv"))   # --out=parts/x.csv for parallel shards
+OUT    <- file.path(SCREEN_DIR, opt("out", "scope_screen.csv"))   # --out=working/scope_screen_parts/x.csv for shards
 SHARD  <- opt("shard", "")            # --shard=2/4 : take every 4th document starting at the 2nd
-REASK  <- opt("reask", "")            # --reask=review/scope_screen_reask.csv : judge these again
+REASK  <- opt("reask", "")            # --reask=04_Screening/inputs/decisions/scope_screen_reask.csv : judge these again
 dir.create(dirname(OUT), recursive = TRUE, showWarnings = FALSE)
 
 ## ---- the accepted year window ---------------------------------------------
@@ -99,17 +100,23 @@ TYPES <- c("implementation completion report", "terminal evaluation",
 YN <- c("yes", "no", "unclear")
 
 ## ---- read a whole document, long-path safe --------------------------------
+# Extraction (pdf / docx / legacy doc) and the deterministic pre-pass live in
+# screen_text.R. The pre-pass strips the GEF portal machine footer (the
+# "M/D/YYYY   Page N of M" lines that put publication_year 2026 on 12
+# documents) and the AfDB PCR boilerplate label that manufactured sham
+# climate_risk_quotes, BEFORE the model reads anything.
 read_all <- function(path) {
   p <- path
   if (nchar(p) > 250) {
-    short <- file.path(tempdir(), paste0("s", abs(sum(utf8ToInt(p))) %% 1e8, ".pdf"))
+    ext <- tolower(tools::file_ext(p)); if (!nzchar(ext)) ext <- "pdf"
+    short <- file.path(tempdir(), paste0("s", abs(sum(utf8ToInt(p))) %% 1e8, ".", ext))
     ok <- suppressWarnings(file.copy(paste0("\\\\?\\", gsub("/", "\\\\", p)),
                                      short, overwrite = TRUE))
     if (!ok) ok <- suppressWarnings(file.copy(p, short, overwrite = TRUE))
     if (!ok) return("")
     p <- short
   }
-  txt <- tryCatch(paste(pdf_text(p), collapse = "\n"), error = function(e) "")
+  txt <- pretreat_text(extract_document_text(p))
   if (nchar(txt) > MAX_CHARS)
     txt <- paste0(substr(txt, 1, round(MAX_CHARS * 0.75)), "\n...[middle omitted]...\n",
                   substr(txt, nchar(txt) - round(MAX_CHARS * 0.25) + 1, nchar(txt)))
@@ -243,13 +250,16 @@ for (s in names(SCAN)) {
   for (rel in SCAN[[s]]) {
     d <- file.path(DOCS_ROOT, rel)
     if (!dir.exists(d)) next
-    for (f in list.files(d, pattern = "\\.(pdf|PDF)$"))
+    # pdf, docx and legacy doc are all read; xlsx and zip stay out (zips are
+    # unpacked at retrieval, xlsx are indicator workbooks). The PDF-only glob
+    # left 53 files - 27 of them narrative Word TEs/MTRs - never screened.
+    for (f in list.files(d, pattern = "\\.(pdf|docx|doc)$", ignore.case = TRUE))
       docs[[length(docs) + 1]] <- list(source = s, folder = rel, file = f,
                                        path = file.path(d, f))
   }
 }
 # one document, one record: aliases found by 02_dedup are not screened
-ALIASES <- file.path(REVIEW_DIR, "duplicates.csv")
+ALIASES <- file.path(SCREEN_DIR, "inputs", "decisions", "duplicates.csv")
 skip <- if (file.exists(ALIASES)) {
   a <- read.csv(ALIASES, stringsAsFactors = FALSE, colClasses = "character")
   paste(a$drop_source, a$drop_file)
@@ -258,17 +268,24 @@ docs <- Filter(function(d) !(paste(d$source, d$file) %in% skip), docs)
 if (length(skip)) cat("skipping", length(skip), "duplicate aliases from", basename(ALIASES), "\n")
 
 # the rule-based family from the census (02_dedup/doc_census.R), if it has run
-CENSUS <- file.path(REVIEW_DIR, "family_census.csv")
+CENSUS <- file.path(SCREEN_DIR, "inputs", "decisions", "family_census.csv")
 guess_of <- if (file.exists(CENSUS)) {
   cen <- read.csv(CENSUS, stringsAsFactors = FALSE, colClasses = "character")
   setNames(cen$family, paste(cen$source, cen$filename))
 } else character(0)
 
+# Already-judged keys come from the part file being written AND from the main
+# judgement list: a --out= shard that only knew its own rows would re-pay for
+# every document already in scope_screen.csv, and the newest-wins merge would
+# then overwrite settled rows. (A --reask run still resets this below: a
+# re-ask replaces the earlier judgement by design.)
 done <- character(0)
-if (file.exists(OUT)) {
-  prev <- tryCatch(read.csv(OUT, stringsAsFactors = FALSE, colClasses = "character"),
+MAIN <- file.path(SCREEN_DIR, "scope_screen.csv")
+for (.f in unique(c(OUT, MAIN))) {
+  if (!file.exists(.f)) next
+  prev <- tryCatch(read.csv(.f, stringsAsFactors = FALSE, colClasses = "character"),
                    error = function(e) NULL)
-  if (!is.null(prev) && nrow(prev)) done <- paste(prev$source, prev$filename)
+  if (!is.null(prev) && nrow(prev)) done <- c(done, paste(prev$source, prev$filename))
 }
 if (nzchar(REASK) && file.exists(REASK)) {
   ra <- read.csv(REASK, stringsAsFactors = FALSE, colClasses = "character")
@@ -288,7 +305,7 @@ if (LIMIT > 0 && length(docs) > LIMIT) docs <- docs[seq_len(LIMIT)]
 cat("to judge:", length(docs), "documents |", length(done), "already done |", MODEL, "\n")
 if (!length(docs)) quit(save = "no")
 
-dir.create(REVIEW_DIR, recursive = TRUE, showWarnings = FALSE)
+dir.create(VOCAB_DIR, recursive = TRUE, showWarnings = FALSE)
 FIELDS <- c("source", "folder", "filename", "verdict", "verdict_model", "reason",
             "family", "family_rule", "family_agrees",
             "doc_type", "doc_kind_stated", "publication_year", "project_name",
@@ -303,7 +320,9 @@ for (i in seq_along(docs)) {
   row$source <- d$source; row$folder <- d$folder; row$filename <- d$file
   row$chars <- nchar(txt)
   if (nchar(txt) < 500) {
-    row$verdict <- "unsure"; row$note <- "no usable text layer; needs a person or OCR"
+    row$verdict <- "unsure"
+    row$note <- if (grepl("\\.doc$", d$file, ignore.case = TRUE) && nchar(txt) == 0)
+      "needs conversion: legacy .doc" else "no usable text layer; needs a person or OCR"
   } else {
     guess <- unname(guess_of[paste(d$source, d$file)])
     guess <- if (length(guess) && !is.na(guess) && guess %in% FAMILY_IDS && guess != "generic") guess else ""

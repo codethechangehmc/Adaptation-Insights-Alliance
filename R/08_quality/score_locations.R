@@ -43,7 +43,7 @@ h[is.na(h)] <- ""; g[is.na(g)] <- ""
 ## code -> name/country via the template registry + this run's proposals
 REG <- read.xlsx(TEMPLATE_XLSX, sheet = "location_codes")
 REG[is.na(REG)] <- ""
-prop_csv <- file.path(REVIEW_DIR, "proposed_new_locations.csv")
+prop_csv <- file.path(VOCAB_DIR, "proposed_new_locations.csv")
 if (file.exists(prop_csv)) {
   pr <- read.csv(prop_csv, stringsAsFactors = FALSE, colClasses = "character")
   pr[is.na(pr)] <- ""
@@ -53,7 +53,7 @@ if (file.exists(prop_csv)) {
 code2name <- setNames(REG$location_name, REG$location_id)
 
 ALIAS <- local({
-  p <- file.path(REVIEW_DIR, "location_aliases.csv")
+  p <- file.path(VOCAB_DIR, "location_aliases.csv")
   if (!file.exists(p)) return(NULL)
   a <- read.csv(p, stringsAsFactors = FALSE, colClasses = "character")
   a[is.na(a)] <- ""; a[nzchar(a$name) & nzchar(a$alias), , drop = FALSE]
