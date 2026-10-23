@@ -1,0 +1,12 @@
+{
+  "checked": "2026-10-15",
+  "max_results_per_query": null,
+  "page_size": 100,
+  "fund": "agent::Adaptation Fund",
+  "regions": [
+    "region::SSF",
+    "region::MEA",
+    "country::XAB"
+  ],
+  "date_note": "Document events or explicit filename date; project completion fallback. Never family approval or ingestion."
+}

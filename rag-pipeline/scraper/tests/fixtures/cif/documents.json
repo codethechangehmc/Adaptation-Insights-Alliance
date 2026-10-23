@@ -1,0 +1,111 @@
+{
+  "query": {
+    "content_type": "documents",
+    "status": true,
+    "$and": [
+      {
+        "$or": [
+          {
+            "lang": {
+              "$exists": false
+            }
+          },
+          {
+            "lang": "en"
+          }
+        ]
+      }
+    ]
+  },
+  "count": 7228,
+  "data": [
+    {
+      "_id": {
+        "title": "CIF ARISE Program Independent Expert Group (IEG) Report",
+        "date": "2026-10-15",
+        "nid": "35933",
+        "sub_title": "",
+        "sub_title_abbr": ""
+      },
+      "data": [
+        {
+          "img": "/sites/cif_enc/files/styles/image_card/public/placeholder-images/doc-placeholder-img.jpg?itok=lEN-3l7Y",
+          "img_alt": "Picture of CIF ARISE Program Independent Expert Group (IEG) Report",
+          "img_title": " ",
+          "img_webp": "/sites/cif_enc/files/styles/search_card/public/placeholder-images/doc-placeholder-img.jpg?itok=cIAibB2n",
+          "path": "/documents/cif-arise-program-independent-expert-group-ieg-report",
+          "content_type": "documents",
+          "category": [
+            "Meeting Working Document"
+          ],
+          "abbvns": [
+            "ARISE"
+          ],
+          "abbvn_img": [
+            {
+              "img": "/sites/cif_enc/files/styles/image_card/public/abbreviation/image/scf.jpeg?itok=iz9NQ2jT",
+              "alt": "SCF",
+              "title": "SCF",
+              "imageuri": "public://abbreviation/image/scf.jpeg"
+            }
+          ],
+          "downloads": [
+            "/sites/cif_enc/files/meeting-documents/scf_tfc.is_.6_02_cif-arise-ieg-report_10142026.pdf"
+          ],
+          "nid": "35933",
+          "program": [
+            "Accelerating Resilience Investments and Innovations for Sustainable Economies (ARISE)"
+          ],
+          "cif_documents_fund_or_program": [
+            "Strategic Climate Fund (SCF) Trust Fund Committee"
+          ],
+          "cif_documents_document_type": [
+            "Meeting Working Document"
+          ]
+        }
+      ]
+    },
+    {
+      "_id": {
+        "title": "Agenda Item 2: Resilience Operations and Results Report",
+        "date": "2026-10-05",
+        "nid": "35911",
+        "sub_title": "",
+        "sub_title_abbr": ""
+      },
+      "data": [
+        {
+          "img": "/sites/cif_enc/files/styles/image_card/public/abbreviation/image/scf.jpeg?itok=iz9NQ2jT",
+          "img_alt": "Picture of SCF",
+          "img_title": " ",
+          "path": "/documents/agenda-item-2-resilience-operations-and-results-report",
+          "content_type": "documents",
+          "category": [
+            "Presentations"
+          ],
+          "abbvns": [
+            "SCF"
+          ],
+          "abbvn_img": [
+            {
+              "img": "/sites/cif_enc/files/styles/image_card/public/abbreviation/image/scf.jpeg?itok=iz9NQ2jT",
+              "alt": "SCF",
+              "title": "SCF",
+              "imageuri": "public://abbreviation/image/scf.jpeg"
+            }
+          ],
+          "downloads": [
+            "/sites/cif_enc/files/meeting-documents/scf_tfc.24-agenda-item-2_resilience-orr_09252026.pdf"
+          ],
+          "nid": "35911",
+          "cif_documents_fund_or_program": [
+            "Strategic Climate Fund (SCF) Trust Fund Committee"
+          ],
+          "cif_documents_document_type": [
+            "Presentations"
+          ]
+        }
+      ]
+    }
+  ]
+}

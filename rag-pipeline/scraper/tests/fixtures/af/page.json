@@ -1,0 +1,56 @@
+{
+  "total_size": 3,
+  "results": [
+    {
+      "id": "AF.family.AF00000127.0",
+      "title": "“Akamatutu’anga kia Tukatau te Ora’anga ite Pa Enua” Pa Enua Action for Resilient Livelihoods (PEARL)",
+      "labels": [
+        {
+          "type": "geography",
+          "value": {
+            "id": "country::COK",
+            "type": "country",
+            "value": "Cook Islands",
+            "labels": []
+          },
+          "timestamp": null,
+          "passages_id": null,
+          "count": null,
+          "document_id": null
+        }
+      ]
+    },
+    {
+      "id": "AF.family.i00000276.n0000",
+      "title": "Adaptation for Water Access and Resilience in Ewaso Nyiro River Basin",
+      "labels": [
+        {
+          "type": "geography",
+          "value": {
+            "id": "region::SSF",
+            "type": "region",
+            "value": "Sub-Saharan Africa",
+            "labels": []
+          },
+          "timestamp": null,
+          "passages_id": null,
+          "count": null,
+          "document_id": null
+        },
+        {
+          "type": "geography",
+          "value": {
+            "id": "country::KEN",
+            "type": "country",
+            "value": "Kenya",
+            "labels": []
+          },
+          "timestamp": null,
+          "passages_id": null,
+          "count": null,
+          "document_id": null
+        }
+      ]
+    }
+  ]
+}
