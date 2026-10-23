@@ -264,7 +264,7 @@ def resolve_pdf_urls(client: Client, record: dict) -> list[str]:
     files = body.select("a[href], iframe[data-src], iframe[src]")
     urls = []
     for item in files:
-        # R also supports older plain anchors and pdf.js file parameters (checked 2026-10-22).
+        # Older pages use plain anchors or a pdf.js ?file= parameter (checked 2026-10-22).
         target = item.get("data-src") or item.get("href") or item.get("src", "")
         target = parse_qs(urlsplit(target).query).get("file", [target])[0]
         urls.append(urljoin(record["web_url"], target))

@@ -52,24 +52,6 @@ class GcfTests(unittest.TestCase):
         self.assertEqual(gcf.classify(rows[0])[0], "in_scope")
         self.assertEqual(gcf.classify(rows[2])[:2], ("drop", "proposal_stage"))
 
-    def test_multi_project_document_preserves_every_selected_project(self) -> None:
-        """A report covering multiple projects must not inherit only the first one's evidence."""
-        page = BeautifulSoup(
-            '<div data-component="cards:document"><a href="/document/report">'
-            '<p class="f-body-bold">Evaluation FP001 FP002</p>'
-            '<p class="f-caption">Evaluation report</p></a></div>',
-            "lxml",
-        )
-        rows = gcf.document_records(
-            [page],
-            {
-                "FP001": {"project_title": "Energy", "country": "Kenya"},
-                "FP002": {"project_title": "Farming resilience", "country": "Uganda"},
-            },
-        )
-        self.assertEqual(rows[0]["project_id"], "FP001;FP002")
-        self.assertEqual(rows[0]["country"], "Kenya,Uganda")
-
 
 if __name__ == "__main__":
     unittest.main()

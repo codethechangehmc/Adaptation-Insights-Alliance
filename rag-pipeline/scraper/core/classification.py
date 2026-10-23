@@ -113,12 +113,12 @@ def decide(source: ModuleType, record: dict, start: date, end: date) -> tuple[st
     if hasattr(source, "prepare_record"):
         source.prepare_record(record)
 
-    # Date window: rule 6. A record with no date is kept for screening.
+    # Date window. A record with no date is kept for screening.
     problem = matching.date_problem(record, start, end)
     if problem == "outside_date_range":
         return "drop", problem, []
 
-    # English only: rule 7.
+    # English only.
     text = f"{record.get('title', '')} {record.get('abstract', '')}"
     if not matching.is_english(record.get("language", ""), text):
         return "drop", "not_english", []

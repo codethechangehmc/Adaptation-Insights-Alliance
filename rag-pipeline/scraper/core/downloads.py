@@ -169,42 +169,39 @@ def download_one(
         return {**result, "status": "no_pdf_url", "reason": "no_pdf_url", "error": error}
 
     # A failed attempt leaves any earlier good file, and its checksum, untouched.
-    part_path = destination.with_name(destination.name + ".part")
     for url in urls:
         try:
-            fetched = client.download(url, part_path)
-            fetched_path = destination.with_suffix(
-                saved_extension(part_path, url, fetched["resolved_url"], destination.suffix)
-            )
-            info = storage.check_document(part_path, fetched_path.suffix)
-            changed = storage.install_document(
-                part_path, fetched_path, versions_dir, info["sha256"], destination
-            )
+            fetched = fetch_file(client, url, destination, versions_dir)
         except (RequestFailed, ValueError, OSError) as error:
             errors.append(f"{url}: {error}")
             continue
-        finally:
-            part_path.unlink(missing_ok=True)
+        changed = fetched.pop("changed")
         reason = "new_file"
         if previous.get("sha256"):
             reason = "content_changed" if changed else "content_unchanged"
-        return {
-            **result,
-            **info,
-            "filename": fetched_path.name,
-            "status": "downloaded",
-            "reason": reason,
-            "error": "",
-            "url": url,
-            "resolved_url": fetched["resolved_url"],
-        }
-    error = " | ".join(errors)
+        return {**result, **fetched, "status": "downloaded", "reason": reason, "error": ""}
+    failed = {"status": "failed", "reason": "all_links_failed", "error": " | ".join(errors)}
+    return {**result, **failed, "url": urls[0]}
+
+
+def fetch_file(client: Client, url: str, destination: Path, versions_dir: Path) -> dict:
+    """Download one link to a .part file, check it, then move it into place."""
+    part_path = destination.with_name(destination.name + ".part")
+    try:
+        fetched = client.download(url, part_path)
+        extension = saved_extension(part_path, url, fetched["resolved_url"], destination.suffix)
+        path = destination.with_suffix(extension)
+        info = storage.check_document(part_path, path.suffix)
+        sha256 = info["sha256"]
+        changed = storage.install_document(part_path, path, versions_dir, sha256, destination)
+    finally:
+        part_path.unlink(missing_ok=True)
     return {
-        **result,
-        "status": "failed",
-        "reason": "all_links_failed",
-        "error": error,
-        "url": urls[0],
+        **info,
+        "filename": path.name,
+        "url": url,
+        "resolved_url": fetched["resolved_url"],
+        "changed": changed,
     }
 
 

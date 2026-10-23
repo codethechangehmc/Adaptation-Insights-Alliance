@@ -64,6 +64,7 @@
                            "Mid-Term Review":  "mid.?term.*review|\\bMTR\\b",
                            "Proposal":  "president.?s?.?report|design.*report|appraisal|proposal|\\bPDR\\b",
                            "Progress Report":  "supervision|progress.*report|annual.*report",
+                           "Audit":  "audit.?report",
                            "Other":  "country.*strategy|\\bCOSOP\\b|\\bESIA\\b"
                        }
 }

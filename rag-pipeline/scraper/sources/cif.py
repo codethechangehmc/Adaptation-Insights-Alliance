@@ -37,7 +37,8 @@ PROPOSAL = re.compile(r"\bproposal\b|\bappraisal\b|monitoring and evaluation fra
 # Planning, method and meeting papers: by document type, then by title.
 ADMIN_TYPE = re.compile(r"presentations?|agenda|minutes|toolkit|guideline", re.I)
 ADMIN_TITLE = re.compile(
-    r"toolkits?|guidelines?|guidance note|\bframework\b|evaluation and learning initiative|"
+    r"toolkits?|guidelines?|guidance note|\bframework\b|options paper|policy and guidance|"
+    r"evaluation (?:and|&) learning (?:\(E&L\) )?initiative|"
     r"annual report|work ?plan|business plan|terms of reference|\btor\b|"
     r"workshop|webinar|agenda|committee|meeting|presentation|concept note|"
     r"^(?:Developmental|Formative|Impact|Outcome) Evaluation$",
@@ -46,7 +47,7 @@ ADMIN_TITLE = re.compile(
 NON_AFRICA = re.compile(
     r"\b(?:Bangladesh|Nepal|India|Indonesia|Brazil|Mexico|Ukraine|"
     r"Tajikistan|Cambodia|Philippines|Vietnam|Honduras|Jamaica|"
-    r"Bolivia|Peru|Chile|Turkey|Türkiye|Papua New Guinea)\b",
+    r"Bolivia|Peru|Chile|Turkey|Türkiye|Papua New Guinea|Caribbean)\b",
     re.I,
 )
 

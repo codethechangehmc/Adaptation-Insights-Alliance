@@ -187,31 +187,10 @@ def run_steps(
         )
         return "incomplete_search"
 
-    # Decide and save every record, then download the kept ones.
     records = classify_step(source, args, run_dir, connection, summary, results)
-    started = time.monotonic()
-    rows: list[dict] = []
-    if not args.metadata_only:
-        state = storage.load_state(connection)
-        kept = [entry["record"] for entry in state.values() if is_kept(entry["record"])]
-        rows = downloads.download_records(source, client, connection, state, kept, args)
-    storage.write_csv(run_dir / "downloads.csv", rows, storage.DOWNLOAD_FIELDS)
-    summary["seconds"]["download"] = round(time.monotonic() - started, 1)
-    summary.update(downloads.download_summary(rows))
-
-    # Publish the catalogue, with a size estimate that includes this run's downloads.
-    state = storage.load_state(connection)
-    summary.update(decision_summary(records, state))
-    catalogue = storage.catalogue_rows(state)
-    storage.write_csv(
-        args.output_dir / f"{source.SOURCE}_metadata.csv", catalogue, fields_of(source)
-    )
-    summary.update(catalogue_records=len(catalogue), requests=client.request_count)
-
-    # Compare with the previous complete run. Warnings point to a changed website.
-    summary["drift_warnings"] = drift_warnings(run_dir, summary)
-    for warning in summary["drift_warnings"]:
-        LOG.warning("Drift: %s", warning)
+    download_step(source, client, args, run_dir, connection, summary)
+    publish_step(source, args, run_dir, connection, summary, records)
+    summary["requests"] = client.request_count
     return "complete"
 
 
@@ -266,6 +245,50 @@ def classify_step(
     summary.update(decision_summary(records, state))
     log_decisions(summary)
     return records
+
+
+def download_step(
+    source: ModuleType,
+    client: Client,
+    args: argparse.Namespace,
+    run_dir: Path,
+    connection: sqlite3.Connection,
+    summary: dict,
+) -> None:
+    """Download every stored kept record that has no good local copy."""
+    started = time.monotonic()
+    rows: list[dict] = []
+    if not args.metadata_only:
+        state = storage.load_state(connection)
+        kept = [entry["record"] for entry in state.values() if is_kept(entry["record"])]
+        rows = downloads.download_records(source, client, connection, state, kept, args)
+    storage.write_csv(run_dir / "downloads.csv", rows, storage.DOWNLOAD_FIELDS)
+    summary["seconds"]["download"] = round(time.monotonic() - started, 1)
+    summary.update(downloads.download_summary(rows))
+
+
+def publish_step(
+    source: ModuleType,
+    args: argparse.Namespace,
+    run_dir: Path,
+    connection: sqlite3.Connection,
+    summary: dict,
+    records: dict[str, dict],
+) -> None:
+    """Write the catalogue and log drift warnings against the previous complete run."""
+    # The size estimate now includes this run's downloads.
+    state = storage.load_state(connection)
+    summary.update(decision_summary(records, state))
+    catalogue = storage.catalogue_rows(state)
+    storage.write_csv(
+        args.output_dir / f"{source.SOURCE}_metadata.csv", catalogue, fields_of(source)
+    )
+    summary["catalogue_records"] = len(catalogue)
+
+    # Warnings point to a changed website; they never fail the run.
+    summary["drift_warnings"] = drift_warnings(run_dir, summary)
+    for warning in summary["drift_warnings"]:
+        LOG.warning("Drift: %s", warning)
 
 
 def is_kept(record: dict) -> bool:

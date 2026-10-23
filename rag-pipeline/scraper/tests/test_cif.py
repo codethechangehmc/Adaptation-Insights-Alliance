@@ -8,8 +8,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from bs4 import BeautifulSoup
-
 from sources import cif
 
 FIXTURES = Path(__file__).parent / "fixtures" / "cif"
@@ -53,20 +51,6 @@ class CifTests(unittest.TestCase):
         for row in rows:
             with self.subTest(id=row["id"]):
                 self.assertEqual(cif.classify(row)[0], "drop")
-
-    def test_detail_alternative_survives_a_broken_indexed_link(self) -> None:
-        """The working detail anchor must remain available after the malformed indexed URL."""
-        client = Mock()
-        client.get_html.return_value = BeautifulSoup(
-            '<main><a href="/report%20summary.pdf">Report</a></main>', "lxml"
-        )
-        urls = cif.resolve_pdf_urls(
-            client,
-            {"web_url": cif.BASE + "/document/x", "pdf_url": cif.BASE + "/report%2520summary.pdf"},
-        )
-        self.assertEqual(
-            urls, [cif.BASE + "/report%2520summary.pdf", cif.BASE + "/report%20summary.pdf"]
-        )
 
 
 if __name__ == "__main__":

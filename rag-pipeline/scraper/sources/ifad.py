@@ -10,7 +10,8 @@ Query cap:  none found: limit=30000 returned all 25,360 activities of GB-GOV-1 i
             page; max_results_per_query is null. IFAD has 1,280 activities
             (checked 2026-10-15)
 Kept:       evaluations, completion reports and mid-term reviews
-Dropped:    proposals, supervision and progress documents
+Dropped:    proposals, supervision, progress and audit documents; copies of a
+            document filed under another project (checked 2026-10-22)
 Quirks:     website document URLs may be landing pages; resolve them only at download time
 
 Run: python rag-pipeline/scraper/run.py ifad --help
@@ -40,6 +41,10 @@ SCOPE = json.loads(SCOPE_FILE.read_text(encoding="utf-8"))
 COUNT_API = "https://d-portal.org/q.json"
 ACTIVITY_API = "https://d-portal.org/q.xml"
 EXTRA_FIELDS = ["project_title", "description", "project_end_date", "categories", "sectors"]
+# IFAD files some documents under extra activities as well. The title's project
+# number names the right one: 225 such copies on 2026-10-22, all also listed
+# under their own activity (Paraguay 1100001750 appears under Madagascar 1100001516).
+TITLE_PROJECT = re.compile(r"[^:]*?\b(\d{10}):")
 # IATI recipient-region codes for Africa and its sub-regions.
 AFRICAN_REGION_CODES = {"298", "289", "189", "1027", "1028", "1029", "1030", "1031"}
 
@@ -110,7 +115,21 @@ def narrative(parent: Tag | None, child: str) -> str:
     texts = element.find_all("narrative")
     english = [text for text in texts if text.get("xml:lang", "").lower() == "en"]
     chosen = (english or texts)[:1]
-    return " ".join(chosen[0].get_text().split()) if chosen else ""
+    return repair_text(" ".join(chosen[0].get_text().split())) if chosen else ""
+
+
+def repair_text(text: str) -> str:
+    """Undo UTF-8 text that the source stored as Latin-1 characters.
+
+    IFAD's XML carries C&#xc3;&#xb4;te for Côte (2026-10-22). Text that does not
+    round-trip cleanly is returned unchanged.
+    """
+    if "Ã" not in text and "Â" not in text:
+        return text
+    try:
+        return text.encode("latin-1").decode("utf-8")
+    except UnicodeError:
+        return text
 
 
 def activity_dates(tag: Tag) -> dict[str, str]:
@@ -232,6 +251,11 @@ def document_type(title: str, categories: list[str]) -> str:
 
 def classify(record: dict) -> tuple[str, str, list[str]]:
     """Return status, reason and matched keywords for one IFAD document."""
+    # A copy filed under another project is dropped; its own activity keeps it.
+    number = TITLE_PROJECT.match(record.get("title", ""))
+    if number and number[1] != record.get("project_id"):
+        return "drop", "filed_under_other_project", []
+
     # Apply document family before agriculture evidence.
     if not matching.is_african(record.get("country", "")):
         return "drop", "no_african_country", []
@@ -242,6 +266,8 @@ def classify(record: dict) -> tuple[str, str, list[str]]:
         return "drop", "progress_report", []
     if kind == "Administrative":
         return "drop", "other_document_type", []
+    if kind == "Audit":
+        return "drop", "audit_report", []
     if kind == "Other":
         return "to_screen", "unknown_document_type", []
     keywords = matching.find_keywords(f"{record['title']} {record.get('project_title', '')}")

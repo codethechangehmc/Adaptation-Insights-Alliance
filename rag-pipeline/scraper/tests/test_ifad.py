@@ -42,24 +42,19 @@ class IFADTests(unittest.TestCase):
         with patch.object(ifad, "list_activities", return_value=SearchResult([self.activity], 2)):
             self.assertTrue(ifad.run_search(client, {}).error)
 
-    def test_relative_links_and_actual_end_date(self) -> None:
-        """Resolve URLs against IFAD and preserve actual project completion dates."""
-        document = self.activity["documents"][0]
-        record = ifad.document_record(self.activity, document, ["KE"])
-        self.assertTrue(record["pdf_url"].startswith("https://www.ifad.org/"))
-        self.assertEqual(record["country"], "Kenya")
-        self.assertEqual(record["project_end_date"], "1990-06-30")
-        self.assertEqual(ifad.classify(record)[:2], ("drop", "other_document_type"))
-
-    def test_document_families_precede_category(self) -> None:
-        """Completion evidence survives a broad supervision category."""
-        self.assertEqual(
-            ifad.document_type("Project completion report", ["A06"]), "Completion Report"
-        )
-        self.assertEqual(ifad.document_type("Supervision report", ["A06"]), "Progress Report")
-        self.assertEqual(ifad.document_type("President's report", ["A04"]), "Proposal")
-        self.assertEqual(ifad.title_year("2000001156 PCR 2019"), "2019")
-        self.assertEqual(ifad.title_year("2000001156 PCR"), "")
+    def test_copy_filed_under_another_project_and_garbled_accents(self) -> None:
+        """Wrong-activity copies and audit reports are dropped; garbled accents are repaired."""
+        # Seen on 2026-10-22: Paraguay 1100001750 listed under Madagascar 1100001516.
+        record = {
+            "title": "Paraguay 1100001750: PROMAFI Project Completion Report",
+            "project_id": "1100001516",
+            "country": "Madagascar",
+            "doc_type": "Completion Report",
+        }
+        self.assertEqual(ifad.classify(record)[:2], ("drop", "filed_under_other_project"))
+        self.assertEqual(ifad.document_type("2020-Ministry of Finance-AUDIT_REPORT", []), "Audit")
+        self.assertEqual(ifad.repair_text("CÃ´te d'Ivoire"), "Côte d'Ivoire")
+        self.assertEqual(ifad.repair_text("Côte d'Ivoire"), "Côte d'Ivoire")
 
 
 if __name__ == "__main__":

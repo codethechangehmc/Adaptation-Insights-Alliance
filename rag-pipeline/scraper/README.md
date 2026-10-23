@@ -107,3 +107,7 @@ The keyword and country lists are in `config/africa.json`.
   be a real report, not an error page.
 - **Change alerts.** A warning is logged when a site suddenly returns far
   fewer results than the last run.
+
+## More detail
+
+[IMPROVEMENTS.md](IMPROVEMENTS.md) explains what changed from the R scrapers.

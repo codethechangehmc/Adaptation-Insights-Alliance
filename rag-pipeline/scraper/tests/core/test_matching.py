@@ -10,9 +10,12 @@ from core import matching
 class KeywordTests(unittest.TestCase):
     """Keyword matching."""
 
-    def test_words_inside_longer_words_do_not_match(self) -> None:
-        """Tea in team and rice in price are not matches."""
+    def test_whole_words_plurals_and_look_alike_places(self) -> None:
+        """Tea in team is no match, farmers matches farmer, Papua New Guinea is not Guinea."""
         self.assertEqual(matching.find_keywords("team price consolidate improving"), [])
+        self.assertEqual(matching.find_keywords("support to farmers"), ["farmer"])
+        self.assertFalse(matching.is_african("Papua New Guinea"))
+        self.assertTrue(matching.is_african("Kenya,Uganda"))
 
 
 if __name__ == "__main__":

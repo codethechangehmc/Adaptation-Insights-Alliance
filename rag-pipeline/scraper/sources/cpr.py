@@ -203,16 +203,20 @@ def place_labels(family: dict) -> dict:
     Country labels decide geography; region labels count only when no country
     is named, so a MENA region label cannot make a Pakistan family African.
     """
-    places = {"geography": [], "region": []}
-    labels = []
+    countries, regions, labels = [], [], []
     for label in family.get("labels", []):
-        if label.get("type") in places:
-            places[label["type"]].append(label["value"]["value"])
-            labels.append(label["value"]["value"])
+        if label.get("type") not in {"geography", "region"}:
+            continue
+        # Since 2026-10 both kinds have type "geography" and value.type says
+        # "country" or "region" (AF.family.006MPKDR.0, Pakistan). Older hits used
+        # type "region" for regions.
+        kind = label["value"].get("type") or label["type"]
+        (regions if kind == "region" else countries).append(label["value"]["value"])
+        labels.append(label["value"]["value"])
     return {
-        "country": ",".join(places["geography"] or places["region"]),
+        "country": ",".join(countries or regions),
         "source_country": ",".join(labels),
-        "region_labels": ",".join(places["region"]),
+        "region_labels": ",".join(regions),
     }
 
 

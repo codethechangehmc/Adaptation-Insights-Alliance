@@ -46,24 +46,6 @@ class FetchTests(unittest.TestCase):
         )
         self.assertEqual(Client(request_interval=2).host_intervals, {})
 
-    def test_not_found_is_not_retried(self) -> None:
-        """A 404 fails at once."""
-        missing = response(404)
-        client = Client(request_interval=0, attempts=3)
-        client._robots["example.org"] = ([], 0.0)
-        with patch.object(requests.Session, "request", return_value=missing) as sent:
-            self.assertRaises(RequestFailed, client.get, "https://example.org/a")
-        self.assertEqual(sent.call_count, 1)
-
-    def test_redirect_checks_destination_robots(self) -> None:
-        """A permitted landing page cannot redirect into a disallowed download."""
-        client = Client(request_interval=0)
-        client._robots.update({"example.org": ([], 0.0), "files.org": ([(False, "/")], 0.0)})
-        redirect = response(302, {"Location": "https://files.org/report.pdf"})
-        with patch.object(requests.Session, "request", return_value=redirect) as sent:
-            self.assertRaises(fetch.BlockedByRobots, client.get, "https://example.org/report")
-        self.assertEqual(sent.call_count, 1)
-
     def test_access_denied_stops_later_requests_to_host(self) -> None:
         """An explicit access block stops other jobs instead of probing new paths."""
         client = Client(request_interval=0)

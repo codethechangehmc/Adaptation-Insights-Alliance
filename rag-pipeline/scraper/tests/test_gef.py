@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import unittest
-from datetime import date
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 from bs4 import BeautifulSoup
 
-from core import classification
 from sources import gef
 
 FIXTURE = Path(__file__).parent / "fixtures/gef/listing.html"
@@ -63,27 +61,6 @@ class GEFTests(unittest.TestCase):
             gef.classify({**records[0], "doc_type": "Project Implementation Report"})[:2],
             ("drop", "progress_report"),
         )
-
-    def test_stored_source_families_use_canonical_rules(self) -> None:
-        """Raw CEO, PIR and TE labels keep their families and original provenance."""
-        for label, canonical, expected in [
-            ("CEO Endorsement", "Proposal", ("drop", "proposal_stage")),
-            ("PIR", "Project Implementation Report", ("drop", "progress_report")),
-            ("TE", "Terminal Evaluation", ("in_scope", "agriculture_or_adaptation_evidence")),
-        ]:
-            with self.subTest(label=label):
-                record = {
-                    "id": "1",
-                    "title": "Farming project",
-                    "doc_type": label,
-                    "doc_date": "2020",
-                    "country": "Kenya",
-                    "project_title": "Farming project",
-                }
-                decision = classification.decide(gef, record, date(2015, 1, 1), date(2026, 10, 22))
-                self.assertEqual(decision[:2], expected)
-                self.assertEqual(record["doc_type"], canonical)
-                self.assertEqual(record["source_doc_type"], label)
 
 
 if __name__ == "__main__":

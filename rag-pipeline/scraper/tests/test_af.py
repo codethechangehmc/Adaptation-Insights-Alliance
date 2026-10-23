@@ -39,22 +39,19 @@ class AdaptationFundTests(unittest.TestCase):
         client.get_json.side_effect = [self.page, self.page]
         self.assertIn("repeated", cpr.list_families(client, "fund").error)
 
-    def test_proposals_and_progress_are_dropped(self) -> None:
-        """Evaluation selection does not promote progress reports."""
-        records = cpr.family_records(self.family, "af")
-        self.assertEqual(af.classify(records[0])[:2], ("drop", "proposal_stage"))
-        self.assertEqual(af.classify(records[3])[:2], ("drop", "non_evaluation_document"))
-        self.assertEqual(af.classify(records[2])[0], "in_scope")
-
     def test_search_preserves_country_separate_from_mena_region(self) -> None:
         """Raw API labels cannot turn a Pakistan family into African evidence."""
         family = copy.deepcopy(self.family)
         family["import_id"] = "AF.family.006MPKDR.0"
+        # Label shape returned by the live API on 2026-10-22.
         hit = {
             "id": family["import_id"],
             "labels": [
-                {"type": "geography", "value": {"value": "Pakistan"}},
-                {"type": "region", "value": {"value": "Middle East & North Africa"}},
+                {
+                    "type": "geography",
+                    "value": {"type": "region", "value": "Middle East & North Africa"},
+                },
+                {"type": "geography", "value": {"type": "country", "value": "Pakistan"}},
             ],
         }
         client = Mock(workers=1)

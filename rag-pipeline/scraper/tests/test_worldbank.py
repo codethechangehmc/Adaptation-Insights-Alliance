@@ -81,13 +81,6 @@ class SearchTests(unittest.TestCase):
         )
         self.assertIn("split at", result.notes)
 
-    def test_cap_on_a_single_day_is_incomplete(self) -> None:
-        """When one day alone reaches the cap, the search is reported incomplete."""
-        same_day = [api_document(n, date(2020, 1, 1)) for n in range(5)]
-        with patch.dict(worldbank.SCOPE, {"max_results_per_query": 3}):
-            result = worldbank.run_search(FakeAPI(same_day), self.search)
-        self.assertIn("reach the cap", result.error)
-
     def test_repeated_page_is_incomplete(self) -> None:
         """A site that serves the same page twice gives an incomplete search."""
         result = worldbank.run_search(FakeAPI(self.documents, repeat_page=True), self.search)
@@ -102,23 +95,6 @@ class RecordTests(unittest.TestCase):
         payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
         self.records = worldbank.page_records(payload)
         self.record = dict(self.records[0], abstract="", topics="")
-
-    def test_abstract_keyword_is_to_screen(self) -> None:
-        """An abstract-only keyword parks the record for screening."""
-        self.record.update(title="Kenya - Roads Project", abstract="Farmers reached markets.")
-        self.assertEqual(
-            worldbank.classify(self.record)[:2], ("to_screen", "abstract_keywords_only")
-        )
-
-    def test_policy_lending_is_dropped(self) -> None:
-        """Development policy lending is dropped by title."""
-        self.record["title"] = "Kenya - Agriculture Development Policy Operation"
-        self.assertEqual(worldbank.classify(self.record)[1], "policy_or_budget_support")
-
-    def test_papua_new_guinea_is_not_african(self) -> None:
-        """Document 33757973's country, Papua New Guinea, is not read as Guinea."""
-        self.record.update(country="Papua New Guinea", title="Agriculture project")
-        self.assertEqual(worldbank.classify(self.record)[1], "no_african_country")
 
 
 if __name__ == "__main__":

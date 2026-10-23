@@ -1,4 +1,4 @@
-"""Batch execution keeps source state separate and reports only current runs."""
+"""Batch runs: lanes run side by side, folders stay separate, one failure does not stop others."""
 
 from __future__ import annotations
 
@@ -12,51 +12,28 @@ import run_all
 
 
 class BatchTests(unittest.TestCase):
-    """Batch failures do not contaminate or stop another source."""
+    """run_all with the per-source process replaced by a stub."""
 
-    def test_source_directories_are_separate_and_failure_does_not_stop_next(self) -> None:
-        """Custom base folders get source subfolders, and every source still executes."""
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            with patch.object(run_all, "run_command", side_effect=[1, 0]) as command:
-                result = run_all.main(
-                    [
-                        "--sources",
-                        "worldbank",
-                        "worldbank_projects",
-                        "--output-dir",
-                        str(root / "outputs"),
-                        "--download-dir",
-                        str(root / "downloads"),
-                        "--metadata-only",
-                    ]
-                )
-            self.assertEqual(result, 1)
-            self.assertEqual(command.call_count, 2)
-            for source, call in zip(
-                ["worldbank", "worldbank_projects"], command.call_args_list, strict=True
-            ):
-                arguments = call.args[1]
-                self.assertEqual(arguments[1:3], [str(run_all.SCRAPER_DIR / "run.py"), source])
-                self.assertIn(str(root / "outputs" / "worldbank"), arguments)
-                self.assertIn("--metadata-only", arguments)
-
-    def test_separate_lanes_run_at_the_same_time(self) -> None:
-        """Sources in different lanes overlap; the barrier fails if they ran in turn."""
+    def test_lanes_overlap_and_a_failure_does_not_stop_the_rest(self) -> None:
+        """AF and CIF meet at a barrier, so they ran at the same time; AF's failure is reported."""
         barrier = threading.Barrier(2, timeout=10)
+        commands = {}
 
-        def meet(source: str, command: list[str]) -> int:
+        def run(source: str, command: list[str]) -> int:
+            commands[source] = command
             barrier.wait()
-            return 0
+            return 1 if source == "af" else 0
 
-        with (
-            tempfile.TemporaryDirectory() as temporary,
-            patch.object(run_all, "run_command", side_effect=meet),
-        ):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(run_all, "run_command", run):
+            root = Path(temporary)
             result = run_all.main(
-                ["--sources", "af", "cif", "--output-dir", temporary, "--metadata-only"]
+                ["--sources", "af", "cif", "--output-dir", str(root), "--metadata-only"]
             )
-        self.assertEqual(result, 0)
+        self.assertEqual(result, 1)
+        for source in ("af", "cif"):
+            self.assertEqual(commands[source][2], source)
+            self.assertIn(str(root / source), commands[source])
+            self.assertIn("--metadata-only", commands[source])
 
 
 if __name__ == "__main__":

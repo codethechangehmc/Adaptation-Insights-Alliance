@@ -104,6 +104,26 @@ def run_lane(
 
 def main(argv: list[str] | None = None) -> int:
     """Run the chosen sources, lanes side by side. Returns 1 if any source failed."""
+    args, passed_on = parse_arguments(argv)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+
+    # Each source runs in its own process, so one crash cannot stop the others.
+    lanes = [[source for source in lane if source in args.sources] for lane in BATCH_LANES]
+    lanes = [lane for lane in lanes if lane]
+    results: dict[str, tuple[int, str]] = {}
+    with ThreadPoolExecutor(max_workers=len(lanes)) as pool:
+        for lane_results in pool.map(lambda lane: run_lane(lane, args, passed_on), lanes):
+            results.update(lane_results)
+
+    # Report in batch order, whatever order the lanes finished in.
+    for source in BATCH_COMMANDS:
+        if source in results:
+            LOG.info("%s", results[source][1])
+    return 1 if any(exit_code for exit_code, _ in results.values()) else 0
+
+
+def parse_arguments(argv: list[str] | None) -> tuple[argparse.Namespace, list[str]]:
+    """Read the batch options; every other option is passed on to each source."""
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -129,21 +149,7 @@ def main(argv: list[str] | None = None) -> int:
     unknown = set(args.sources) - set(BATCH_COMMANDS)
     if unknown:
         parser.error(f"Unknown sources: {', '.join(sorted(unknown))}")
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-
-    # Each source runs in its own process, so one crash cannot stop the others.
-    lanes = [[source for source in lane if source in args.sources] for lane in BATCH_LANES]
-    lanes = [lane for lane in lanes if lane]
-    results: dict[str, tuple[int, str]] = {}
-    with ThreadPoolExecutor(max_workers=len(lanes)) as pool:
-        for lane_results in pool.map(lambda lane: run_lane(lane, args, passed_on), lanes):
-            results.update(lane_results)
-
-    # Report in batch order, whatever order the lanes finished in.
-    for source in BATCH_COMMANDS:
-        if source in results:
-            LOG.info("%s", results[source][1])
-    return 1 if any(exit_code for exit_code, _ in results.values()) else 0
+    return args, passed_on
 
 
 if __name__ == "__main__":

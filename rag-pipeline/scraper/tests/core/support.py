@@ -8,7 +8,7 @@ from pathlib import Path
 
 import requests
 
-from core.fetch import Client, RequestFailed
+from core.fetch import Client
 from core.searching import SearchResult
 
 PDF = b"%PDF-1.7\n" + b"padding " * 2000 + b"\n%%EOF\n"
@@ -64,8 +64,3 @@ def write_pdf(client: Client, url: str, part_path: Path) -> dict:
     """Stand in for Client.download: write a valid PDF."""
     part_path.write_bytes(PDF)
     return {"resolved_url": url, "bytes": len(PDF)}
-
-
-def fail_download(client: Client, url: str, part_path: Path) -> dict:
-    """Stand in for Client.download: fail like a dead link."""
-    raise RequestFailed(url, "HTTP 404", 404)
