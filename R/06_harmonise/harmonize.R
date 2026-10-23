@@ -57,42 +57,10 @@ s1 <- read.csv(s1_csv, check.names = FALSE, stringsAsFactors = FALSE, colClasses
 s1[is.na(s1)] <- ""
 
 # ------------------------------------------------------- controlled values --
-# From the 27 Aug 2026 template readme (regenerate on template release).
-OPT <- list(
-  scale = c("individual/ household", "community", "sub-national", "national",
-            "multinational", "unclear/ unspecified"),
-  beneficiary = c("agribusiness", "artisanal fisher", "children", "community",
-    "cooperative", "elderly", "farm laborer", "farmer association",
-    "farmer group", "household", "indigenous peoples", "low-income households",
-    "marginalized group", "migrant", "pastoralist/herder",
-    "people with disabilities/ disability", "producer", "producer organization",
-    "smallholder farmer", "subsistence farmer", "vulnerable population",
-    "women (female-headed households)", "women's group/organization", "youth"),
-  doc_type = c("implementation status report", "implementation completion report",
-    "impact evaluation report", "case study", "policy brief", "technical note",
-    "monitoring & evaluation report", "terminal evaluation", "mid-term evaluation",
-    "conference proceeding", "donor report", "resilience assessment",
-    "learning brief", "practice note", "multi-country synthesis",
-    "regional policy brief", "results framework", "portfolio performance review",
-    "thematic adaptation evaluation"),
-  metric = c("association members", "biodiversity landscapes conserved",
-    "cooperatives reached", "crop producers", "crop yield increase",
-    "direct beneficiaries", "extension agents trained", "farmer groups",
-    "fishers", "harvest loss reduced", "income increase", "irrigated land",
-    "jobs created", "land restored", "land under climate-smart practices",
-    "livestock producers", "pest/disease reduction", "processors",
-    "producer organizations", "smallholder farmers reached",
-    "soil organic matter improved", "terrestrial protected areas",
-    "total beneficiaries", "vulnerable households", "wholesalers",
-    "women beneficiaries", "youth beneficiaries"),
-  unit = c("groups", "hectares", "households", "individuals", "kg",
-    "kg/hectare", "liters", "organizations", "percentage", "quantity",
-    "tCO2e", "tons"))
-
-DEFS <- list(
-  scale = "individual/household: persons or families receiving direct or indirect benefits; community: local residents benefitting collectively; sub-national: interventions benefit regional populations (a landscape, district, or agricultural production zone); national: an entire country's citizens benefit broadly; multinational: involves and benefits multiple nations; unclear/ unspecified: affected beneficiaries remain unidentified.",
-  beneficiary = "agribusiness: commercial enterprises in production/processing/distribution of agricultural products; artisanal fisher: small-scale traditional fishers; children: under eighteen; community: a social group sharing space/culture/interests; cooperative: member-owned enterprise; elderly: sixty-five and above; farm laborer: wage farm workers without land; farmer association: organized farmer group for advocacy/markets; farmer group: small collective of farmers collaborating; household: residential unit sharing income and consumption; indigenous peoples: distinct ethnic groups with historical territorial ties; low-income households: earnings below basic-needs threshold; marginalized group: systematically excluded populations; migrant: person moving for opportunity or safety; pastoralist/herder: livelihood from moving livestock; people with disabilities: long-term impairments; producer: cultivates crops or rears animals; producer organization: formal entity representing producers; smallholder farmer: cultivates a small plot with family labor; subsistence farmer: produces mainly to feed own family; vulnerable population: higher risk of poverty/exclusion/harm; women (female-headed households): woman is primary decision-maker/provider; women's group/organization: women's collectives; youth: fifteen to twenty-four.",
-  doc_type = "Note: an independent ex-post evaluation that reviews/re-rates a completion report (AfDB PPER, IEG review) = terminal evaluation; an independent evaluation office's multi-program evaluation = portfolio performance review; a completion report written by the financier at project close = implementation completion report.")
+# OPT (the option lists) and DEFS (their readme definitions) moved to
+# R/00_shared/vocab_lists.R on 30 Sep 2026, so the QC workbook builder offers
+# consultants the same lists harmonisation chose from. Two copies would drift.
+source(file.path(REPO, "R", "00_shared", "vocab_lists.R"))
 
 # --------------------------------------------------------- LLM batch helper --
 llm_map <- function(field, texts, options, definitions = "", na_rule = "") {
@@ -316,7 +284,7 @@ resolve_actors <- function(all_names, context = NULL) {
       # organisation. The location side already does this; this side did not.
       prev <- unlist(lapply(
         c(file.path(OUT_DIR, "proposed_new_actors.csv"),
-          file.path(REVIEW_DIR, "proposed_new_actors.csv")), function(f) {
+          file.path(VOCAB_DIR, "proposed_new_actors.csv")), function(f) {
           if (!file.exists(f)) return(character(0))
           d <- tryCatch(read.csv(f, stringsAsFactors = FALSE), error = function(e) NULL)
           if (is.null(d) || !"suggested_code" %in% names(d)) character(0)
@@ -744,16 +712,23 @@ TEMPLATE_COLS <- c("project_code", "project_title", "project_id", "project_lead"
   "resource_id", "evidence_depth",
   "reference_link_1", "reference_link_2", "reference_link_3")
 for (cc in TEMPLATE_COLS) if (!cc %in% names(h)) h[[cc]] <- ""
-tmpl <- h[, TEMPLATE_COLS]
 
 s1_model <- if ("model" %in% names(s1) && nzchar(s1$model[1]))
   gsub("[^a-z0-9]+", "-", tolower(s1$model[1])) else "unknown"
 stamp <- paste0(s1_model, "_", format(Sys.time(), "%Y%m%d_%H%M"))
-out1 <- file.path(OUT_DIR, paste0("harmonized_", stamp, ".csv"))
-out2 <- file.path(OUT_DIR, paste0("harmonized_diagnostics_", stamp, ".csv"))
-write_csv(tmpl, out1)
 h$harmonize_version <- PROMPT_VERSION; h$session1_file <- basename(s1_csv)
-write_csv(h, out2)
-cat("template-shaped:", out1, "\ndiagnostics:    ", out2, "\n")
+
+# ONE output, not two. Until 30 Sep 2026 this wrote a clean template-shaped
+# file and a diagnostics twin, and the clean one is what reached people: every
+# quote, page and fact-check verdict was dropped on the way out, so a reviewer
+# got values with no trail back to the document. TEMPLATE_COLS now defines the
+# delivery VIEW rather than destroying the rest. The template columns come
+# first so the file still reads as the sheet; export_results.R subsets to them
+# for the workbook, and the QC builder and the scorer read what follows.
+h <- h[, c(TEMPLATE_COLS, setdiff(names(h), TEMPLATE_COLS))]
+out1 <- file.path(OUT_DIR, paste0("harmonized_", stamp, ".csv"))
+write_csv(h, out1)
+cat("harmonised:", out1, "\n  ", length(TEMPLATE_COLS), "template columns +",
+    ncol(h) - length(TEMPLATE_COLS), "evidence/diagnostic columns\n")
 cat("actors: ", sum(!startsWith(unlist(amap), "NEW:")), "matched,",
     sum(startsWith(unlist(amap), "NEW:")), "proposed new\n")

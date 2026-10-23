@@ -5,7 +5,7 @@
 # project_data_location-specific columns:
 #   - location codes matched against the template's location_codes registry
 #     (677 entries; codes are reused across projects), unmatched locations
-#     become PROPOSALS in 04_Extraction_Results/review/proposed_new_locations.csv
+#     become PROPOSALS in 05_Extraction_Results/review/proposed_new_locations.csv
 #     with a suggested code {project_code}.{next number} and empty
 #     coordinates for the team to fill ("pipeline proposes, team decides",
 #     protocol §5). Nothing here is estimated: a value the document does not
@@ -147,7 +147,7 @@ REG$norm_country <- tolower(trimws(REG$location_country))
 # Registries and documents name the same place in different languages. Rows are
 # name|alias (both directions are tried). Team-editable; missing file is fine.
 ALIAS <- local({
-  p <- file.path(REVIEW_DIR, "location_aliases.csv")
+  p <- file.path(VOCAB_DIR, "location_aliases.csv")
   if (!file.exists(p)) return(NULL)
   a <- read.csv(p, stringsAsFactors = FALSE, colClasses = "character")
   a[is.na(a)] <- ""
@@ -205,7 +205,7 @@ loc_level <- function(doc, name) {
 # same documents mints new codes while the review file keeps the old ones, and
 # the sheet ends up with codes that resolve to nothing.
 PREV_PROP <- local({
-  f <- file.path(REVIEW_DIR, "proposed_new_locations.csv")
+  f <- file.path(VOCAB_DIR, "proposed_new_locations.csv")
   if (!file.exists(f))
     return(data.frame(location_name = character(0), location_id = character(0),
                       location_country = character(0), first_seen_project = character(0),
@@ -274,7 +274,11 @@ match_one_loc <- function(name, pcode, doc) {
   key <- paste0(tolower(name), "|", ctry)
   if (!is.null(proposals[[key]])) return(list(code = proposals[[key]]$location_id, how = "proposed"))
   earlier <- prev_code(name, pcode, ctry)
-  code <- if (nzchar(earlier)) earlier else paste0(pcode, ".", next_no(pcode))
+  # safe_name() on the prefix only: a corpus project code carries a "source:"
+  # prefix, and a location_id reaching the registry as "cif:foo.pdf.3" would be
+  # permanent. first_seen_project below keeps the real code, so prev_code()
+  # still matches.
+  code <- if (nzchar(earlier)) earlier else paste0(safe_name(pcode), ".", next_no(pcode))
   proposals[[key]] <<- data.frame(
     location_name = trimws(name), location_id = code,
     location_type = map_loc_type(loc_level(doc, name)),
@@ -299,9 +303,12 @@ for (i in seq_len(nrow(rows))) {
 }
 
 ## ── controlled vocabularies: deterministic pass then ONE batched LLM call ──
-SUBSECTORS <- c("agri-food", "farming system-crop", "farming system-livestock",
-                "farming system-mixed", "farming system-fish", "land use",
-                "cross cutting")
+# The option lists live in R/00_shared/vocab_lists.R from 30 Sep 2026, so the
+# QC workbook builder offers consultants the same values harmonisation chose
+# from. The definitions below stay here: only this script sends them to the
+# model. Fingerprints are unchanged, so every recorded decision still hits.
+source(file.path(REPO, "R", "00_shared", "vocab_lists.R"))
+SUBSECTORS <- OPT$subsector
 SUB_DEFS <- paste(
   "1) agri-food: food production and distribution systems (processing,",
   "value chains, markets, food security programming);",
@@ -315,15 +322,11 @@ SUB_DEFS <- paste(
   "(finance, insurance, policy, capacity building across sectors).")
 
 
-TARGETS <- c("agribusiness", "artisanal fisher", "children", "community",
-  "cooperative", "elderly", "farm laborer", "farmer association",
-  "farmer group", "household", "indigenous peoples", "low-income households",
-  "marginalized group", "migrant", "pastoralist/herder", "people with disabilities/ disability",
-  "producer", "producer organization", "smallholder farmer", "subsistence farmer",
-  "vulnerable population", "women (female-headed households)",
-  "women's group/organization", "youth")
+# this was a character-for-character copy of the general sheet's beneficiary
+# list; both sheets now read the one definition
+TARGETS <- OPT$beneficiary
 
-RESULT_LEVELS <- c("input", "process", "output", "outcome", "impact")
+RESULT_LEVELS <- OPT$result_level
 LEVEL_DEFS <- paste(
   "1) input: resources, means and investments mobilized to conduct",
   "interventions; 2) process: activities or tasks carried out by the project",
@@ -382,7 +385,7 @@ llm_choose <- function(items, vocab, defs, what) {
   all
 }
 
-CAND_LOG <- file.path(REVIEW_DIR, "candidate_vocab_log.csv")
+CAND_LOG <- file.path(VOCAB_DIR, "candidate_vocab_log.csv")
 log_candidate <- function(field, value, context) {
   row <- data.frame(date = format(Sys.Date()), field = field, candidate = value,
                     context = substr(context, 1, 160), stringsAsFactors = FALSE)
@@ -583,7 +586,7 @@ if (!is.null(prop)) {
       "coordinates to be entered in QC - the document does not give them"))
   }
   # append to the shared review file, dedup by name+country+project
-  PROP_CSV <- file.path(REVIEW_DIR, "proposed_new_locations.csv")
+  PROP_CSV <- file.path(VOCAB_DIR, "proposed_new_locations.csv")
   if (file.exists(PROP_CSV)) {
     old <- read.csv(PROP_CSV, stringsAsFactors = FALSE, colClasses = "character")
     key <- function(d) tolower(paste(d$location_name, d$location_country, d$first_seen_project))
@@ -615,6 +618,10 @@ join_gen <- function(pcode, field) {
 }
 
 ## ── assemble the template sheet ────────────────────────────────────────────
+# An evidence column is carried through only if Session 1 actually produced it,
+# so an older s1loc file still harmonises instead of erroring on a missing name.
+ev_col <- function(nm) if (nm %in% names(rows)) as.character(rows[[nm]]) else rep("", nrow(rows))
+
 out <- data.frame(
   row_id = seq_len(nrow(rows)),
   project_code  = rows$project_code_hint,
@@ -640,6 +647,20 @@ out <- data.frame(
     ifelse(nzchar(rows$loc_match) & grepl("proposed|ambiguous", rows$loc_match),
            paste0("location ", rows$loc_match, "; "), ""),
     sub("^; ", "", rows$notes_extra)))),
+  # ---- evidence, kept beside the values (30 Sep 2026) --------------------
+  # This frame is hand-built, and until now it quietly dropped the page, the
+  # document and the row flags that Session 1 had produced. A location row
+  # therefore reached a reviewer with nothing saying where it came from, and
+  # the general sheet at least had its quotes in the diagnostics file. These
+  # columns sit after the template's own, so the sheet still pastes into the
+  # template unchanged.
+  page = ev_col("page"),
+  document = ev_col("document"),
+  row_flags = ev_col("row_flags"),
+  loc_match = ev_col("loc_match"),
+  locations_stated = ev_col("locations_stated"),
+  target_beneficiary_stated = ev_col("target_beneficiary_stated"),
+  prompt_version = ev_col("prompt_version"),
   check.names = FALSE, stringsAsFactors = FALSE)
 
 stamp <- paste0(MODEL_TAG, "_", format(Sys.time(), "%Y%m%d_%H%M"))

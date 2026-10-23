@@ -1,4 +1,4 @@
-# Working in 05_Pipeline
+# Working in 07_Pipeline
 
 This repo is the code of the CGIAR WP2 grey-literature workstream (retrieve,
 dedup, screen, catalogue, extract, harmonise, review, score, publish). It

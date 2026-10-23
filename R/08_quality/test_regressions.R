@@ -16,6 +16,8 @@ source(file.path(REPO, "R", "00_shared", "actor_names.R"))
 source(file.path(REPO, "R", "00_shared", "clean_fields.R"))
 source(file.path(REPO, "R", "00_shared", "results_rank.R"))
 source(file.path(REPO, "R", "00_shared", "loc_rules.R"))
+source(file.path(REPO, "R", "00_shared", "vocab_lists.R"))   # OPT, the controlled values
+source(file.path(REPO, "R", "00_shared", "vocab_cache.R"))   # vocab_fingerprint()
 
 reg  <- actor_registry(TEMPLATE_XLSX)
 syn  <- read.csv(file.path(REPO, "catalogues", "actor_synonyms.csv"), stringsAsFactors = FALSE, encoding = "UTF-8")
@@ -415,6 +417,40 @@ check("two rows quoting the same figure collapse to one slot", {
   ch <- choose_headline(results_gate(list(R("10,226", "Urea distributed", "mt"), R("10226", "Urea distributed", "mt"),
                                           R("500", "boreholes drilled", "boreholes")), "afdb_pcr"), n = 3L)
   sum(vals(ch) == "10226") == 1 })
+
+cat("filename-safe project codes (30 Sep 2026): a corpus run builds every code\n")
+cat("as source:id, and a colon cannot go in a Windows path\n")
+check("a pilot code is left exactly as it is", safe_name("P001") == "P001")
+check("a World Bank corpus code loses its colon",
+      safe_name("worldbank:P119380") == "worldbank_P119380")
+check("a CIF fallback code (filename with spaces, commas, dots) becomes one safe token",
+      safe_name("cif:CIF_eval, 2019 (final).pdf") == "cif_CIF_eval_2019_final_pdf")
+check("an AfDB code keeps its hyphens", safe_name("afdb:P-Z1-AA0-006") == "afdb_P-Z1-AA0-006")
+check("an empty code never yields an empty filename", safe_name("") == "unnamed")
+check("no character Windows forbids survives",
+      !grepl("[:*?<>|]", safe_name("cif:a*b?c<d>e|f.pdf")) &&
+      !grepl("/", safe_name("cif:a/b/c.pdf"), fixed = TRUE))
+
+cat("one source of truth for the controlled vocabularies (30 Sep 2026)\n")
+check("the five general lists are there",
+      all(c("scale", "beneficiary", "doc_type", "metric", "unit") %in% names(OPT)))
+check("the two location lists live beside them",
+      all(c("subsector", "result_level") %in% names(OPT)))
+check("subsector still has its 7 values, 'cross cutting' included",
+      length(OPT$subsector) == 7 && "cross cutting" %in% OPT$subsector)
+check("result_level still has its 5 values", length(OPT$result_level) == 5)
+check("beneficiary still has its 24 values", length(OPT$beneficiary) == 24)
+# vocab_cache.R keys every recorded decision on the option list itself, so one
+# edited string silently invalidates every decision in vocab_decisions.csv and
+# costs a corpus of model calls. These pin the fingerprints that were live when
+# the lists moved out of the two harmonisers.
+check("the scale fingerprint is unchanged", vocab_fingerprint(OPT$scale) == "6-143903628")
+check("the beneficiary fingerprint is unchanged", vocab_fingerprint(OPT$beneficiary) == "24-115445661")
+check("the doc_type fingerprint is unchanged", vocab_fingerprint(OPT$doc_type) == "19-942938535")
+check("the metric fingerprint is unchanged", vocab_fingerprint(OPT$metric) == "27-87336763")
+check("the unit fingerprint is unchanged", vocab_fingerprint(OPT$unit) == "12-10592817")
+check("the subsector fingerprint is unchanged", vocab_fingerprint(OPT$subsector) == "7-809569049")
+check("the result_level fingerprint is unchanged", vocab_fingerprint(OPT$result_level) == "5-529304297")
 
 cat(sprintf("\n%d cases, %d failed\n", n, fails))
 if (fails > 0L) quit(status = 1L)

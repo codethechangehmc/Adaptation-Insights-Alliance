@@ -19,7 +19,7 @@
 #                            group and the scenario flags
 #   about                    when, how, from what
 #
-# Inputs: the folders under 03_Documents, review/scope_screen.csv (verdicts),
+# Inputs: the folders under 03_Documents, 04_Screening/scope_screen.csv (verdicts),
 # review/family_census.csv (families), 03_Documents/duplicates (moved copies),
 # the Zotero group library (read only, attachments by file name). No model
 # calls. Rerun any time:  Rscript R/04_catalogue/corpus_inventory.R
@@ -84,7 +84,11 @@ sector_group <- function(reason) {
 ## ---- 1. walk 03_Documents -------------------------------------------------------
 all_files <- list.files(DOCS_ROOT, recursive = TRUE, full.names = FALSE)
 all_files <- all_files[!grepl("^~\\$", basename(all_files))]
-all_files <- all_files[!basename(all_files) %in% c("Corpus_Inventory.xlsx", "README.md", "duplicates_register.xlsx")]
+# The inventory itself, and any dated copy of it, are not corpus documents.
+# Matching the exact name let Corpus_Inventory_BEFORE_REPAIR_20261002.xlsx be
+# counted as an evaluation in the files sheet.
+all_files <- all_files[!grepl("^(Corpus_Inventory|duplicates_register)", basename(all_files)) &
+                       basename(all_files) != "README.md"]
 top <- sub("/.*$", "", all_files)
 src_map <- c(Worldbank = "worldbank", gef = "gef", gcf = "gcf", afdb = "afdb", af = "af", cif = "cif",
              pilot = "pilot", duplicates = "duplicates")
@@ -104,7 +108,7 @@ files <- data.frame(source = source_of, folder = rel_dir, filename = fname, ext 
 cat("files under 03_Documents:", nrow(files), "\n")
 
 ## ---- 2. screening verdicts and census ------------------------------------------
-sc <- read.csv(file.path(REVIEW_DIR, "scope_screen.csv"), stringsAsFactors = FALSE, colClasses = "character", encoding = "UTF-8")
+sc <- read.csv(file.path(SCREEN_DIR, "scope_screen.csv"), stringsAsFactors = FALSE, colClasses = "character", encoding = "UTF-8")
 sc[is.na(sc)] <- ""
 sc$source <- tolower(sc$source)
 key_f <- paste(files$source, tolower(files$filename)); key_s <- paste(sc$source, tolower(sc$filename))
@@ -120,7 +124,7 @@ files$language <- pick("language"); files$countries <- pick("countries")
 files$covers_several_projects <- pick("covers_several_projects")
 files$adaptation_or_mitigation <- pick("adaptation_or_mitigation")
 files$climate_risk_quote <- pick("climate_risk_quote")
-cen_p <- file.path(REVIEW_DIR, "family_census.csv")
+cen_p <- file.path(SCREEN_DIR, "inputs", "decisions", "family_census.csv")
 if (file.exists(cen_p)) {
   cen <- read.csv(cen_p, stringsAsFactors = FALSE, colClasses = "character", encoding = "UTF-8"); cen[is.na(cen)] <- ""
   mc <- match(key_f, paste(tolower(cen$source), tolower(cen$filename)))
@@ -210,7 +214,7 @@ overview_notes <- data.frame(note = c(
   "not_pdf: Word and Excel files (counted inside files_on_disk).",
   "duplicates_moved_out: copies moved to 03_Documents/duplicates with the register there.",
   "in_zotero: screened documents whose file is attached in the Zotero group library (match on file name).",
-  sprintf("Screening file: %s (%d judgements). Generated %s.", file.path("04_Extraction_Results", "review", "scope_screen.csv"), nrow(sc), format(Sys.time(), "%Y-%m-%d %H:%M"))))
+  sprintf("Screening file: %s (%d judgements). Generated %s.", file.path("04_Screening", "scope_screen.csv"), nrow(sc), format(Sys.time(), "%Y-%m-%d %H:%M"))))
 
 # scenario 1: strict agriculture (the rule as it stands)
 s1_src <- add_total(by_src(docs, function(d) data.frame(source = SRC_LABEL[[d$source[1]]],
@@ -255,7 +259,7 @@ s2_notes <- data.frame(note = c(
   sprintf("(%s)", paste(GROUP_LABEL[LINKED_GROUPS], collapse = "; ")),
   "and the document passes every other criterion: dated 2015 to 2025, an evaluation type document, a project in Africa, adaptation (not mitigation), a climate risk quoted, one project.",
   "The sector group is read from the screener's reason. A reason that says sector without naming one cannot be placed and is not counted.",
-  "To move the boundary, change LINKED_GROUPS in R/04_catalogue/corpus_inventory.R and rerun. To accept these documents for real, add them to review/scope_screen_overrides.csv and rerun screen_rules.R."))
+  "To move the boundary, change LINKED_GROUPS in R/04_catalogue/corpus_inventory.R and rerun. To accept these documents for real, add them to 04_Screening/inputs/decisions/scope_screen_overrides.csv and rerun screen_rules.R."))
 
 folders <- do.call(rbind, lapply(split(files, paste(files$source, files$folder)), function(g) data.frame(
   source = g$source[1], folder = g$folder[1], kind_of_file = g$kind_of_file[1], n_files = nrow(g), n_pdf = sum(g$ext == "pdf"),
@@ -290,8 +294,8 @@ addWorksheet(wb, "folders"); put("folders", folders, 1, NULL, c(10, 40, 20, 8, 8
 addWorksheet(wb, "files"); put("files", files_out, 1, NULL, c(10, 18, 30, 55, 5, 8, 9, 13, 13, 30, 20, 12, 26, 6, 8, 20, 18, 30, 12, 26, 60, 9), filter = TRUE); freezePane(wb, "files", firstRow = TRUE)
 addWorksheet(wb, "about")
 info <- data.frame(what = c("generated", "generated by", "screening file", "census file", "zotero library", "zotero status", "linked sector groups", "year window"),
-  value = c(format(Sys.time(), "%Y-%m-%d %H:%M"), "05_Pipeline/R/04_catalogue/corpus_inventory.R (rerun any time)",
-            sprintf("04_Extraction_Results/review/scope_screen.csv, %d judgements", nrow(sc)), "04_Extraction_Results/review/family_census.csv", zlib,
+  value = c(format(Sys.time(), "%Y-%m-%d %H:%M"), "07_Pipeline/R/04_catalogue/corpus_inventory.R (rerun any time)",
+            sprintf("04_Screening/scope_screen.csv, %d judgements", nrow(sc)), "04_Screening/inputs/decisions/family_census.csv", zlib,
             if (is.null(zotero_files)) paste("unavailable:", zotero_note) else sprintf("%d attachments read; in_zotero matches on exact file name", length(zotero_files)),
             paste(GROUP_LABEL[LINKED_GROUPS], collapse = "; "), sprintf("%d to %d", YEAR_MIN, YEAR_MAX)), stringsAsFactors = FALSE)
 put("about", info, 1, NULL, c(22, 110))
@@ -299,13 +303,43 @@ saveWorkbook(wb, OUT_XLSX, overwrite = TRUE)
 # openxlsx leaves relationship entries that point at drawing parts it never
 # writes. Excel ignores them; strict readers (openpyxl, some validators) stop
 # on them. Drop every relationship whose target is missing.
+#
+# TWO BUGS FIXED HERE, 2 Oct 2026, after this function corrupted the workbook
+# it was meant to tidy:
+#
+#   1. `parts` came from list.files() WITHOUT all.files = TRUE, which skips
+#      names beginning with a dot. The package's root relationship part is
+#      called `_rels/.rels`, so it was never in the list and the rezip wrote a
+#      workbook without it. That part is what tells Excel where the workbook
+#      is, so Excel reported the file as corrupt and offered to recover it.
+#      Every regeneration since 25 Sep produced an unopenable file.
+#   2. The sweep only read xl/worksheets/_rels. [Content_Types].xml declared
+#      six /xl/drawings/drawingN.xml parts that openxlsx never wrote, and a
+#      declared part that does not exist is itself a validity error.
+#
+# Both are now covered, and the function refuses to write a package that is
+# missing its root part rather than shipping a broken file quietly.
 tidy_xlsx <- function(path) {
   if (!requireNamespace("zip", quietly = TRUE)) return(invisible(FALSE))
   tmp <- file.path(tempdir(), "xlsx_tidy"); unlink(tmp, recursive = TRUE); dir.create(tmp)
   utils::unzip(path, exdir = tmp)
-  parts <- list.files(tmp, recursive = TRUE)
+  # all.files = TRUE: without it `_rels/.rels` is silently left out
+  parts <- list.files(tmp, recursive = TRUE, all.files = TRUE, no.. = TRUE)
   rels <- list.files(file.path(tmp, "xl", "worksheets", "_rels"), full.names = TRUE)
   n <- 0
+  # a content type for a part that was never written is a validity error
+  ct <- file.path(tmp, "[Content_Types].xml")
+  if (file.exists(ct)) {
+    txt <- readChar(ct, file.info(ct)$size, useBytes = TRUE)
+    ms <- gregexpr('<Override [^>]*/>', txt)[[1]]
+    if (ms[1] != -1) for (e in regmatches(txt, list(ms))[[1]]) {
+      part <- sub('.*PartName="/?([^"]+)".*', "\\1", e)
+      if (!file.exists(file.path(tmp, part))) {
+        txt <- sub(e, "", txt, fixed = TRUE); n <- n + 1
+      }
+    }
+    writeChar(txt, ct, eos = NULL, useBytes = TRUE)
+  }
   for (rp in rels) {
     txt <- readChar(rp, file.info(rp)$size, useBytes = TRUE)
     ms <- gregexpr('<Relationship [^>]*/>', txt)[[1]]
@@ -317,6 +351,13 @@ tidy_xlsx <- function(path) {
       if (!file.exists(full)) { txt <- sub(e, "", txt, fixed = TRUE); n <- n + 1 }
     }
     writeChar(txt, rp, eos = NULL, useBytes = TRUE)
+  }
+  # never ship a package without its root relationship part: that is the
+  # failure this function used to cause
+  if (!any(parts == "_rels/.rels")) {
+    warning("tidy_xlsx: _rels/.rels missing from the unpacked parts; ",
+            "leaving ", basename(path), " exactly as openxlsx wrote it")
+    return(invisible(0L))
   }
   if (n) zip::zip(path, files = parts, root = tmp, mode = "mirror", include_directories = FALSE)
   invisible(n)

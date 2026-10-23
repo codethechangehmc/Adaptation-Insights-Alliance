@@ -1,0 +1,70 @@
+[
+ {
+  "probe": "B1-robots",
+  "url": "https://www.ifad.org/robots.txt",
+  "status": 200,
+  "challenge": false,
+  "bytes": 220,
+  "links": 0,
+  "sample": []
+ },
+ {
+  "probe": "B2-project-Angola",
+  "url": "https://www.ifad.org/w/projects/1679",
+  "status": 403,
+  "challenge": true,
+  "bytes": 14834,
+  "links": 0,
+  "sample": []
+ },
+ {
+  "probe": "B2-project-Burkina Faso",
+  "url": "https://www.ifad.org/w/projects/1580",
+  "status": 403,
+  "challenge": true,
+  "bytes": 14834,
+  "links": 0,
+  "sample": []
+ },
+ {
+  "probe": "B2-project-Burundi",
+  "url": "https://www.ifad.org/w/projects/2000000738",
+  "status": 403,
+  "challenge": true,
+  "bytes": 14830,
+  "links": 0,
+  "sample": []
+ },
+ {
+  "probe": "B2-project-Benin",
+  "url": "https://www.ifad.org/w/projects/1635",
+  "status": 403,
+  "challenge": true,
+  "bytes": 14834,
+  "links": 0,
+  "sample": []
+ },
+ {
+  "probe": "B2-project-Cameroon",
+  "url": "https://www.ifad.org/w/projects/1694",
+  "status": 403,
+  "challenge": true,
+  "bytes": 14834,
+  "links": 0,
+  "sample": []
+ },
+ {
+  "probe": "B3-operations-host",
+  "url": "https://operations.ifad.org/documents/654016/43257e60-52c7-43d8-afa7-e6c577eb3a4f",
+  "error": "page.goto: net::ERR_SSL_VERSION_OR_CIPHER_MISMATCH at https://operations.ifad.org/documents/654016/43257e60-52c7-43d8-afa7-e6c577eb3a4f"
+ },
+ {
+  "probe": "B5-ioe",
+  "url": "https://ioe.ifad.org/en/evaluations",
+  "status": 403,
+  "challenge": true,
+  "bytes": 14831,
+  "links": 0,
+  "sample": []
+ }
+]

@@ -1,7 +1,7 @@
 # Headline results: which three of a document's results are the main ones.
 #
 # Rule from the survey of 50 random in-scope documents (28 Sep 2026,
-# 04_Extraction_Results/review/headline_results_survey/README.md). A reader did
+# 05_Extraction_Results/review/headline_results_survey/README.md). A reader did
 # the same thing in every document: first decide what counts as a result, then
 # take the project's reach, its main physical achievement and its main measured
 # effect, each the largest project-level figure of its kind. The largest number

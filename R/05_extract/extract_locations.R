@@ -52,6 +52,7 @@ if (length(args) == 1 && grepl("\\.csv$", args[1])) {
 full <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
 REPO <- if (length(full)) normalizePath(file.path(dirname(sub("^--file=", "", full[1])), "..", "..")) else getwd()
 OUT_DIR <- Sys.getenv("EXTRACT_OUT_DIR", file.path(REPO, "outputs", "extraction", "locations"))
+source(file.path(REPO, "R", "00_shared", "paths.R"))          # safe_name(): project codes are not filename-safe
 source(file.path(REPO, "R", "00_shared", "clean_fields.R"))
 RAW_DIR <- file.path(OUT_DIR, "raw")
 dir.create(RAW_DIR, recursive = TRUE, showWarnings = FALSE)
@@ -617,8 +618,8 @@ extract_doc <- function(pdf_path, focus = "", pcode = "", groups = GROUPS) {
     }
     cat(sprintf("  %-14s ok (%ss)\n", gname, secs))
     raw[[gname]] <- res
-    write_json(res, file.path(RAW_DIR, paste0("s1loc_", if (nzchar(pcode)) paste0(pcode, "_") else "", substr(doc_name, 1, 55),
-               "_", gname, ".json")), auto_unbox = TRUE, pretty = TRUE)
+    write_json(res, file.path(RAW_DIR, paste0("s1loc_", if (nzchar(pcode)) paste0(safe_name(pcode), "_") else "", substr(doc_name, 1, 55),
+               "_", gname, ".json")), auto_unbox = TRUE, pretty = TRUE)   # safe_name(): a corpus project code carries a "source:" prefix and a colon cannot go in a Windows path
   }
   rows_df <- if (!is.null(raw$location_rows)) fold_rows(raw$location_rows, meta) else NULL
   locs_df <- if (!is.null(raw$locations)) fold_locations(raw$locations, meta) else NULL

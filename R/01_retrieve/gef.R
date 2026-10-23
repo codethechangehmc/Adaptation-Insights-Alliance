@@ -82,20 +82,61 @@ GEF_AFRICA_COUNTRIES <- c(
 # Minimum approval year
 GEF_MIN_YEAR <- 2000
 
-# Document type patterns to target
+# Funding-source facet ids for the two adaptation windows. The country ×
+# focal-area enumeration above misses regional/multi-country projects (33 of
+# them African at the Oct 2026 audit); the funding_source facet reaches them
+# directly and covers both adaptation funds.
+GEF_FUNDING_SOURCES <- c(LDCF = "479", SCCF = "490")
+
+# Document type patterns to target.
+# Spelled-out names tolerate a short separator run (space, _, ., - and the
+# %20 that gef_decode() resolves). These are safe against type, title AND url.
 GEF_DOC_TYPE_PATTERNS <- c(
-  "terminal.evaluation",
-  "mid.?term.review",
-  "CEO.endorsement",
-  "project.document",
-  "project.identification",
-  "PIF",
+  "terminal[^a-z0-9]{0,2}evaluation",
+  "mid[^a-z0-9]{0,2}term[^a-z0-9]{0,2}(review|evaluation)",
+  "CEO[^a-z0-9]{0,2}(endorsement|approval)",
+  "project[^a-z0-9]{0,2}document",
+  "project[^a-z0-9]{0,2}identification",
   "evaluation",
-  "completion",
-  "PIR",     # Project Implementation Report
-  "MTR",     # Mid-Term Review
-  "TE"       # Terminal Evaluation
+  "completion"
 )
+# Bare acronyms match as WHOLE TOKENS only (see gef_token_regex) and only
+# against doc_type and the link text / document title — never raw URLs, where
+# "te" is a substring of half the English language. (The pre-fix filter
+# matched bare "TE" anywhere in doc_url and so passed 615 proposals.)
+GEF_DOC_TYPE_TOKENS <- c("PIF", "PIR", "MTR", "TER", "TE", "ICR")
+
+# A token bounded by anything that is not a letter or digit. Underscore IS a
+# boundary ("GUID_TE.pdf" matches TE); accented letters are NOT ("Côte" must
+# never match TE), hence \p{L}\p{N} rather than [a-z0-9] or \b.
+gef_token_regex <- function(tokens) {
+  paste0("(?<![\\p{L}\\p{N}])(", paste(tokens, collapse = "|"), ")(?![\\p{L}\\p{N}])")
+}
+
+# Decode %-encoding (twice: the GEF CDN double-encodes some filenames, e.g.
+# %2520) so "_3302%20TE.pdf" exposes TE as a token and "Terminal%20Evaluation"
+# its words. Never fails: undecodable input is returned as-is.
+gef_decode <- function(x) {
+  x <- as.character(x)
+  x[is.na(x)] <- ""
+  for (i in 1:2) {
+    x <- vapply(x, function(s)
+      tryCatch(utils::URLdecode(s), error = function(e) s, warning = function(w) s),
+      character(1), USE.NAMES = FALSE)
+  }
+  x
+}
+
+# thegef.org's Varnish/Fastly edge answers 403 to requests WITHOUT a Referer
+# header, whatever the pace (verified 2026-10-02: a single fresh request with
+# the honest UA fails without a Referer and passes with one; the Azure CDN
+# hosting the documents does not care). This is not burst throttling - no
+# amount of backoff fixes it. Install the Referer session-wide so every
+# polite_get/safe_read_html/download_pdf call inherits it.
+gef_set_referer <- function() {
+  httr::set_config(httr::add_headers(Referer = GEF_DB_URL))
+  invisible(TRUE)
+}
 
 # ── Helper: Build GEF filter URL ──────────────────────────────────────────
 build_gef_url <- function(country_id = NULL,
@@ -126,16 +167,99 @@ build_gef_url <- function(country_id = NULL,
   url
 }
 
+# ── Helper: funding-source facet URLs and listing assertions ──────────────
+build_gef_funding_url <- function(fund_id, page = NULL) {
+  url <- paste0(GEF_DB_URL, "?f%5B0%5D=funding_source%3A", fund_id)
+  if (!is.null(page) && page > 0) url <- paste0(url, "&page=", page)
+  url
+}
+
+# What a REAL results page for this facet looks like. The facet id is echoed
+# on every page (drupalSettings currentQuery and the export link), the results
+# table carries class views-view-table, and the view header shows a non-zero
+# "Displaying i - j of n". A nonsense facet id returns HTTP 200 with
+# "Displaying 0 - 0 of 0" and NO views-view-table (verified 2026-10-02), so it
+# fails this assertion - which is exactly what the canary requires.
+gef_listing_expect <- function(fund_id) {
+  list(
+    content_type = "text/html",
+    min_bytes    = 50000,
+    contains     = c(
+      paste0("funding_source(%3A|:)", fund_id),
+      "views-view-table",
+      "Displaying [0-9]+ - [0-9]+ of [1-9][0-9]*"
+    )
+  )
+}
+
+# ── Helper: is there a next page? ──────────────────────────────────────────
+# rvest::html_node() returns an xml_missing NODE when nothing matches - never
+# NULL - so the old `if (is.null(next_link)) break` NEVER fired and every
+# listing loop ran one page past the end. For the funding sweep that extra
+# page is fatal: GEF serves the past-the-end page as HTTP 200 with a stale
+# "Displaying 391 - 395 of 395" but NO views-view-table, which trips
+# assert_response and kills the run (observed 2026-10-02 at LDCF page 14).
+# html_attr() on a missing node yields NA, which is the honest test.
+gef_has_next_page <- function(html) {
+  nd <- rvest::html_node(html, "a[rel='next']")
+  if (is.null(nd) || inherits(nd, "xml_missing")) return(FALSE)
+  href <- rvest::html_attr(nd, "href")
+  !is.na(href) && nzchar(href)
+}
+
+# ── Helper: parse one listing page's project rows ──────────────────────────
+# Columns: Title, ID, Countries, Focal Areas, Type, Agencies, GEF Grant,
+# Cofinancing, Status. query_label records which facet query found the row.
+parse_gef_listing_rows <- function(html, query_label) {
+  out <- list()
+  rows <- html %>% rvest::html_nodes("table tbody tr")
+  for (tr in rows) {
+    cells <- tr %>% rvest::html_nodes("td")
+    if (length(cells) < 3) next
+
+    link <- tr %>% rvest::html_node("a[href*='/projects-operations/projects/']")
+    if (is.null(link)) next
+
+    href <- rvest::html_attr(link, "href")
+    if (is.na(href)) next
+
+    title <- trimws(rvest::html_text(link))
+    cell_texts <- trimws(rvest::html_text(cells))
+
+    gef_id <- sub(".*/projects/", "", href)
+    project_url <- if (grepl("^https?://", href)) href else paste0(GEF_BASE, href)
+
+    out[[length(out) + 1]] <- list(
+      gef_id        = as.character(gef_id),
+      project_title = as.character(title),
+      project_url   = as.character(project_url),
+      gef_project_id = if (length(cell_texts) >= 2) cell_texts[2] else NA_character_,
+      country       = if (length(cell_texts) >= 3) cell_texts[3] else NA_character_,
+      focal_areas   = if (length(cell_texts) >= 4) cell_texts[4] else NA_character_,
+      project_type  = if (length(cell_texts) >= 5) cell_texts[5] else NA_character_,
+      agencies      = if (length(cell_texts) >= 6) cell_texts[6] else NA_character_,
+      gef_grant     = if (length(cell_texts) >= 7) cell_texts[7] else NA_character_,
+      cofinancing   = if (length(cell_texts) >= 8) cell_texts[8] else NA_character_,
+      status        = if (length(cell_texts) >= 9) cell_texts[9] else NA_character_,
+      query_country = query_label
+    )
+  }
+  out
+}
+
 # ── Step 1: Scrape project listing from HTML table ────────────────────────
-collect_project_metadata <- function() {
+collect_project_metadata <- function(limit = NA_integer_) {
   cli::cli_h2("Step 1: Scraping project metadata from HTML table")
 
-  all_projects <- list()
-  n_countries <- length(GEF_AFRICA_COUNTRIES)
+  countries <- GEF_AFRICA_COUNTRIES
+  if (!is.na(limit)) countries <- head(countries, limit)
 
-  for (i in seq_along(GEF_AFRICA_COUNTRIES)) {
-    country_name <- names(GEF_AFRICA_COUNTRIES)[i]
-    country_id <- GEF_AFRICA_COUNTRIES[i]
+  all_projects <- list()
+  n_countries <- length(countries)
+
+  for (i in seq_along(countries)) {
+    country_name <- names(countries)[i]
+    country_id <- countries[i]
 
     cli::cli_alert_info("[{i}/{n_countries}] Scraping: {country_name}")
 
@@ -145,50 +269,24 @@ collect_project_metadata <- function() {
     repeat {
       url <- build_gef_url(country_id = country_id, page = page)
       html <- safe_read_html(url)
-      if (is.null(html)) break
-
-      # Parse all table rows
-      rows <- html %>% rvest::html_nodes("table tbody tr")
-      if (length(rows) == 0) break
-
-      for (tr in rows) {
-        cells <- tr %>% rvest::html_nodes("td")
-        if (length(cells) < 3) next
-
-        # Find the project link
-        link <- tr %>% rvest::html_node("a[href*='/projects-operations/projects/']")
-        if (is.null(link)) next
-
-        href <- rvest::html_attr(link, "href")
-        if (is.na(href)) next
-
-        title <- trimws(rvest::html_text(link))
-        cell_texts <- trimws(rvest::html_text(cells))
-
-        gef_id <- sub(".*/projects/", "", href)
-        project_url <- if (grepl("^https?://", href)) href else paste0(GEF_BASE, href)
-
-        # Columns: Title, ID, Countries, Focal Areas, Type, Agencies, GEF Grant, Cofinancing, Status
-        all_projects[[length(all_projects) + 1]] <- list(
-          gef_id        = as.character(gef_id),
-          project_title = as.character(title),
-          project_url   = as.character(project_url),
-          gef_project_id = if (length(cell_texts) >= 2) cell_texts[2] else NA_character_,
-          country       = if (length(cell_texts) >= 3) cell_texts[3] else country_name,
-          focal_areas   = if (length(cell_texts) >= 4) cell_texts[4] else NA_character_,
-          project_type  = if (length(cell_texts) >= 5) cell_texts[5] else NA_character_,
-          agencies      = if (length(cell_texts) >= 6) cell_texts[6] else NA_character_,
-          gef_grant     = if (length(cell_texts) >= 7) cell_texts[7] else NA_character_,
-          cofinancing   = if (length(cell_texts) >= 8) cell_texts[8] else NA_character_,
-          status        = if (length(cell_texts) >= 9) cell_texts[9] else NA_character_,
-          query_country = country_name
-        )
-        country_count <- country_count + 1
+      if (is.null(html)) {
+        # A NULL page here means throttling/transport failure, NOT an empty
+        # listing. Breaking would silently truncate this country's results
+        # and the truncation would look complete downstream. Stop loudly.
+        stop("GEF listing fetch failed (", country_name, ", page ", page, "): ",
+             url, "\n  A truncated listing must never look complete - ",
+             "wait out the throttle and rerun.", call. = FALSE)
       }
 
+      new_rows <- parse_gef_listing_rows(html, country_name)
+      for (r in new_rows) {
+        if (is.na(r$country)) r$country <- country_name
+        all_projects[[length(all_projects) + 1]] <- r
+      }
+      country_count <- country_count + length(new_rows)
+
       # Check for next page
-      next_link <- html %>% rvest::html_node("a[rel='next']")
-      if (is.null(next_link)) break
+      if (!gef_has_next_page(html)) break
 
       page <- page + 1
       if (page > 100) break  # safety
@@ -219,6 +317,62 @@ collect_project_metadata <- function() {
 
   result <- bind_rows(lapply(all_projects, as_tibble))
   cli::cli_alert_success("Total raw projects collected: {nrow(result)}")
+  result
+}
+
+# ── Step 1b: Funding-source sweep (LDCF + SCCF) ────────────────────────────
+# Enumerate the two adaptation windows by funding_source facet. Unlike the
+# per-country sweep this reaches regional/multi-country projects, which the
+# project_country_national facet never lists. Every page is asserted to be a
+# genuine results view for the requested fund (see gef_listing_expect); a NULL
+# or non-matching page STOPS the run rather than truncating the listing.
+collect_funding_source_projects <- function(funds = GEF_FUNDING_SOURCES) {
+  cli::cli_h2("Step 1b: Funding-source sweep ({paste(names(funds), collapse = ' + ')})")
+  gef_set_referer()
+
+  all_projects <- list()
+  for (k in seq_along(funds)) {
+    fund_name <- names(funds)[k]
+    fund_id   <- funds[k]
+    page <- 0
+    fund_count <- 0
+
+    repeat {
+      url <- build_gef_funding_url(fund_id, page = page)
+      resp <- polite_get(url)
+      # on_fail = "stop": a truncated sweep must never look complete
+      assert_response(resp, url, gef_listing_expect(fund_id),
+                      on_fail = "stop", source = "gef")
+      html <- xml2::read_html(httr::content(resp, as = "text", encoding = "UTF-8"))
+
+      new_rows <- parse_gef_listing_rows(html, paste0("funding_source:", fund_name))
+      for (r in new_rows) {
+        r$fund <- fund_name
+        all_projects[[length(all_projects) + 1]] <- r
+      }
+      fund_count <- fund_count + length(new_rows)
+      cli::cli_alert_info("  {fund_name} page {page}: {length(new_rows)} rows (cum {fund_count})")
+
+      if (!gef_has_next_page(html)) break
+      page <- page + 1
+      if (page > 100) stop("funding sweep: pagination ran past 100 pages - ",
+                           "the pager is broken or the facet is wrong", call. = FALSE)
+    }
+    cli::cli_alert_success("{fund_name}: {fund_count} project rows")
+  }
+
+  if (length(all_projects) == 0) stop("funding sweep returned zero projects", call. = FALSE)
+  result <- bind_rows(lapply(all_projects, as_tibble))
+
+  # A project can sit in both windows: collapse to one row per gef_id with the
+  # funds concatenated.
+  result <- result %>%
+    dplyr::group_by(gef_id) %>%
+    dplyr::mutate(fund = paste(sort(unique(fund)), collapse = "+")) %>%
+    dplyr::slice(1) %>%
+    dplyr::ungroup()
+
+  cli::cli_alert_success("Funding sweep: {nrow(result)} distinct projects")
   result
 }
 
@@ -419,20 +573,36 @@ extract_documents_from_page <- function(html, gef_id, proj_title, proj_url, coun
 }
 
 # ── Helper: Infer document type from URL and title ────────────────────────
+# Decoded url AND title are both searched; bare acronyms (TE, MTR, TER, ICR,
+# PIR, PIF, TT) only count as whole tokens (gef_token_regex), so "3302 TE",
+# "_4908%20TE.pdf" and "GUID_TE.pdf" type as Terminal Evaluation while
+# "water", "database" and "Côte" never do.
+#
+# Evaluation types are checked FIRST: a name showing both an evaluation token
+# and a proposal word is an evaluation, and a real TE/MTR must never fall
+# through to NA - an NA doc_type inherits priority 99 in
+# select_best_gef_document and would LOSE to a PIF (priority 11).
 infer_gef_doc_type <- function(url, title) {
-  combined <- tolower(paste(url, title))
+  combined <- tolower(paste(gef_decode(url), gef_decode(title)))
+  tok <- function(tokens) grepl(gef_token_regex(tokens), combined,
+                                perl = TRUE, ignore.case = TRUE)
 
-  if (grepl("terminal.evaluation|/te/|_te[_.]", combined)) return("Terminal Evaluation")
-  if (grepl("mid.?term.review|/mtr/|_mtr[_.]", combined)) return("Mid-Term Review")
-  if (grepl("pir|implementation.report", combined))        return("Project Implementation Report")
-  if (grepl("ceo.endorsement|ceoendorsement", combined))   return("CEO Endorsement")
-  if (grepl("pif|project.identification", combined))        return("Project Identification Form")
-  if (grepl("project.document|prodoc", combined))           return("Project Document")
-  if (grepl("review.sheet", combined))                      return("Review Sheet")
-  if (grepl("completion", combined))                        return("Completion Report")
-  if (grepl("evaluation", combined))                        return("Evaluation")
-  if (grepl("tracking.tool|tt[_.]", combined))              return("Tracking Tool")
-  if (grepl("agency.project", combined))                    return("Agency Project Document")
+  if (grepl("terminal[^a-z0-9]{0,2}evaluation", combined) ||
+      tok(c("TE", "TER", "ICR")))                           return("Terminal Evaluation")
+  if (grepl("mid[^a-z0-9]{0,2}term[^a-z0-9]{0,2}(review|evaluation)", combined) ||
+      tok("MTR"))                                           return("Mid-Term Review")
+  if (grepl("implementation[^a-z0-9]{0,2}report", combined) ||
+      tok("PIR"))                                           return("Project Implementation Report")
+  if (grepl("ceo[^a-z0-9]{0,2}(endorsement|approval)|ceoendorsement", combined))
+                                                            return("CEO Endorsement")
+  if (grepl("project[^a-z0-9]{0,2}identification", combined) ||
+      tok("PIF"))                                           return("Project Identification Form")
+  if (grepl("project[^a-z0-9]{0,2}document|prodoc", combined)) return("Project Document")
+  if (grepl("review[^a-z0-9]{0,2}sheet", combined))          return("Review Sheet")
+  if (grepl("completion", combined))                         return("Completion Report")
+  if (grepl("evaluation", combined))                         return("Evaluation")
+  if (grepl("tracking[^a-z0-9]{0,2}tool", combined) || tok("TT")) return("Tracking Tool")
+  if (grepl("agency[^a-z0-9]{0,2}project", combined))        return("Agency Project Document")
 
   NA_character_
 }
@@ -444,10 +614,24 @@ filter_target_documents <- function(docs) {
   if (nrow(docs) == 0) return(docs)
 
   type_pattern <- paste(GEF_DOC_TYPE_PATTERNS, collapse = "|")
+  tok_pattern  <- gef_token_regex(GEF_DOC_TYPE_TOKENS)
 
-  docs$is_target <- grepl(type_pattern, docs$doc_type, ignore.case = TRUE) |
-                    grepl(type_pattern, docs$doc_title, ignore.case = TRUE) |
-                    grepl(type_pattern, docs$doc_url, ignore.case = TRUE)
+  # NA-safe matcher: an NA field simply doesn't match (never poisons the `|`)
+  m <- function(x, pattern, perl = FALSE) {
+    x <- as.character(x); x[is.na(x)] <- ""
+    grepl(pattern, x, ignore.case = TRUE, perl = perl)
+  }
+  title_dec <- gef_decode(docs$doc_title)
+  url_dec   <- gef_decode(docs$doc_url)
+
+  # Spelled-out patterns may match anywhere (type, title, decoded url);
+  # bare acronym TOKENS only count in doc_type and the link text/title -
+  # never in the URL, where "te" occurs as a substring of ordinary words.
+  docs$is_target <- m(docs$doc_type, type_pattern) |
+                    m(title_dec,     type_pattern) |
+                    m(url_dec,       type_pattern) |
+                    m(docs$doc_type, tok_pattern, perl = TRUE) |
+                    m(title_dec,     tok_pattern, perl = TRUE)
 
   target_docs <- docs[docs$is_target, ]
   target_docs$is_target <- NULL
@@ -486,7 +670,9 @@ select_best_gef_document <- function(docs) {
 
   if (nrow(docs) == 0) return(docs)
 
-  # Assign priority integer; NA doc_type gets lowest priority
+  # Assign priority integer. An NA / unknown doc_type gets 99 - strictly worse
+  # than every typed document - so an untyped row can never outrank a typed
+  # evaluation (or anything else typed). slice_min keeps the LOWEST priority.
   docs$priority <- GEF_DOC_PRIORITY[docs$doc_type]
   docs$priority[is.na(docs$priority)] <- 99L
 
@@ -612,7 +798,10 @@ download_documents <- function(docs) {
 }
 
 # ── Save metadata ─────────────────────────────────────────────────────────
-save_metadata <- function(data, filename) {
+# suffix: "_limit" on smoke runs, so a `--limit` invocation can never clobber
+# the real catalogue outputs.
+save_metadata <- function(data, filename, suffix = "") {
+  if (nzchar(suffix)) filename <- sub("(\\.csv)$", paste0(suffix, "\\1"), filename)
   meta_path <- file.path(PATHS$data, filename)
   # Flatten any list-columns
   for (col in names(data)) {
@@ -627,13 +816,22 @@ save_metadata <- function(data, filename) {
 }
 
 # ── Main execution ────────────────────────────────────────────────────────
-run_gef_scraper <- function() {
+#' @param limit integer; smoke-run cap. Caps the country enumeration AND the
+#'   number of project pages visited to `limit`, and suffixes every metadata
+#'   file with "_limit" so a smoke run never clobbers the real outputs.
+#' @param stage "all" (catalogue + download) or "catalogue" (no downloads).
+run_gef_scraper <- function(limit = NA_integer_, stage = c("all", "catalogue")) {
+  stage <- match.arg(stage)
   cli::cli_h1("GEF Grey Literature Scraper")
   cli::cli_alert_info("Download directory: {DOWNLOAD_DIR}")
   cli::cli_alert_info("Filters: Climate Change, Africa (all statuses), >= {GEF_MIN_YEAR}")
+  if (!is.na(limit)) cli::cli_alert_warning("SMOKE RUN: limit = {limit} (outputs suffixed _limit)")
+
+  gef_set_referer()
+  suffix <- if (!is.na(limit)) "_limit" else ""
 
   # Step 1: Collect project metadata by scraping HTML tables
-  raw_projects <- collect_project_metadata()
+  raw_projects <- collect_project_metadata(limit = limit)
 
   if (nrow(raw_projects) == 0) {
     cli::cli_alert_danger("No projects found.")
@@ -649,9 +847,10 @@ run_gef_scraper <- function() {
   }
 
   # Save project metadata
-  save_metadata(projects, "gef_projects_metadata.csv")
+  save_metadata(projects, "gef_projects_metadata.csv", suffix)
 
   # Step 3: Scrape documents from each project page
+  if (!is.na(limit)) projects <- head(projects, limit)
   all_docs <- scrape_project_documents(projects)
 
   if (nrow(all_docs) == 0) {
@@ -660,7 +859,7 @@ run_gef_scraper <- function() {
   }
 
   # Save all documents metadata
-  save_metadata(all_docs, "gef_all_documents.csv")
+  save_metadata(all_docs, "gef_all_documents.csv", suffix)
 
   # Step 4: Filter for target document types
   target_docs <- filter_target_documents(all_docs)
@@ -671,11 +870,16 @@ run_gef_scraper <- function() {
   }
 
   # Save target documents metadata
-  save_metadata(target_docs, "gef_target_documents.csv")
+  save_metadata(target_docs, "gef_target_documents.csv", suffix)
 
   # Step 5: One-per-project selection
   best_docs <- select_best_gef_document(target_docs)
-  save_metadata(best_docs, "gef_best_documents.csv")
+  save_metadata(best_docs, "gef_best_documents.csv", suffix)
+
+  if (stage == "catalogue") {
+    cli::cli_alert_info("Stage 'catalogue': stopping before downloads.")
+    return(invisible(target_docs))
+  }
 
   # Step 6: Download
   download_documents(best_docs)
@@ -687,7 +891,26 @@ run_gef_scraper <- function() {
   invisible(target_docs)
 }
 
-# Run if called directly
-if (sys.nframe() == 0 || !interactive()) {
-  run_gef_scraper()
+# ── CLI ─────────────────────────────────────────────────────────────────────
+# Run only when THIS file is the Rscript target. source("gef.R") must never
+# start a scrape: the tests and the gef_funding_sweep.R / gef_gapfill.R
+# helpers source this file for its functions. (The previous guard
+# `sys.nframe() == 0 || !interactive()` executed on every non-interactive
+# source().)
+#
+#   Rscript R/01_retrieve/gef.R [--limit N] [--stage catalogue|all]
+.gef_is_main <- local({
+  fa <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
+  length(fa) > 0 && identical(tolower(basename(sub("^--file=", "", fa[1]))), "gef.r")
+})
+if (.gef_is_main) {
+  .args <- commandArgs(trailingOnly = TRUE)
+  .opt <- function(flag, default = NA_character_) {
+    i <- which(.args == flag)
+    if (length(i) && length(.args) > i[1]) .args[i[1] + 1] else default
+  }
+  run_gef_scraper(
+    limit = suppressWarnings(as.integer(.opt("--limit"))),
+    stage = { s <- .opt("--stage"); if (is.na(s)) "all" else s }
+  )
 }

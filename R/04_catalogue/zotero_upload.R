@@ -4,7 +4,7 @@
 # One Zotero "report" item per corpus document, organised in collections
 #   {Institution} / included | to screen | screened out | duplicates
 # Since 18 Sep 2026 the SCREENING decides membership and status: every
-# document judged in review/scope_screen.csv is an item, with status from
+# document judged in 04_Screening/scope_screen.csv is an item, with status from
 # its verdict (in scope -> included, unsure -> to screen, out of scope ->
 # screened out). The six source builders below supply the metadata (title,
 # URL, report number, Call Number, doc tags) as a pool that
@@ -653,7 +653,7 @@ main <- function() {
           for (f in res$failed) cli_alert_danger("  adopt failed: {f$message}")
         Sys.sleep(1)
       }
-      log_path <- file.path(GL, "04_Extraction_Results/review/zotero_reconciliation_log.csv")
+      log_path <- file.path(GL, "04_Screening/inputs/reports/zotero_reconciliation_log.csv")
       readr::write_csv(bind_rows(recon_log), log_path,
                        append = file.exists(log_path))
       cli_alert_success("adoptions logged to {log_path}")

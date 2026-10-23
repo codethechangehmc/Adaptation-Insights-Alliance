@@ -242,7 +242,7 @@ readme <- data.frame(` ` = c(
  "not say what the right answer is. Those became questions for the template",
  "owner. They are tracked in QC_Common_Mistakes.docx, not here.",
  "",
- "Rebuilt with: Rscript 05_Pipeline/R/09_publish/prompt_history.R"),
+ "Rebuilt with: Rscript 07_Pipeline/R/09_publish/prompt_history.R"),
  check.names = FALSE, stringsAsFactors = FALSE)
 
 wb <- createWorkbook()

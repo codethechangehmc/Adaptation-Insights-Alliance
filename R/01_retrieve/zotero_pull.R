@@ -15,7 +15,7 @@
 #   Rscript R/01_retrieve/zotero_pull.R --dry       list what would be pulled
 #   Rscript R/01_retrieve/zotero_pull.R             pull
 #   -> 03_Documents/{source}/Docs/to_screen/zotero_{key}_{filename}
-#      04_Extraction_Results/review/zotero_pulled.csv
+#      04_Screening/inputs/reports/zotero_pulled.csv
 
 suppressPackageStartupMessages({ library(httr); library(jsonlite) })
 full <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
@@ -70,7 +70,7 @@ atts <- get_all("/items?itemType=attachment")
 cat("library:", length(top), "top-level items,", length(atts), "attachments\n")
 
 # what the corpus already holds, by content
-cen_p <- file.path(REVIEW_DIR, "family_census.csv")
+cen_p <- file.path(SCREEN_DIR, "inputs", "decisions", "family_census.csv")
 cen <- if (file.exists(cen_p)) read.csv(cen_p, stringsAsFactors = FALSE, colClasses = "character") else data.frame(md5 = character(0), filename = character(0))
 have_md5 <- unique(cen$md5)
 file_of_md5 <- setNames(cen$filename, cen$md5)      # first corpus file with these bytes
@@ -108,7 +108,7 @@ cat("to pull:", nrow(todo), "\n")
 have <- cand[nrow(cand) > 0 & nzchar(cand$institution) & cand$already_in_corpus, , drop = FALSE]
 cat("already in the corpus (to adopt under the existing record):", nrow(have), "\n")
 if (DRY || (!nrow(todo) && !nrow(have))) quit(save = "no")
-REG <- file.path(REVIEW_DIR, "zotero_pulled.csv")
+REG <- file.path(SCREEN_DIR, "inputs", "reports", "zotero_pulled.csv")
 old <- if (file.exists(REG)) read.csv(REG, stringsAsFactors = FALSE, colClasses = "character") else NULL
 have <- have[!(have$key %in% old$zotero_key), , drop = FALSE]      # registered on an earlier run
 todo <- todo[!(todo$key %in% old$zotero_key), , drop = FALSE]

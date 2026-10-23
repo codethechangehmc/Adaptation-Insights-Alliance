@@ -11,7 +11,7 @@ suppressPackageStartupMessages(library(openxlsx))
 #   Rscript R/07_review/check_actor_countries.R
 #
 # Wrong answers with the country present point at registry rows that share a
-# name or an acronym (see 04_Extraction_Results/review/registry_duplicates.csv).
+# name or an acronym (see 04_Screening/inputs/reports/registry_duplicates.csv).
 
 full <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
 REPO <- normalizePath(file.path(dirname(sub("^--file=", "", full[1])), "..", ".."), mustWork = TRUE)

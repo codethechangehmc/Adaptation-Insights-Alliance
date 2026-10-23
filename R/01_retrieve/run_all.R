@@ -111,3 +111,23 @@ for (s in names(results)) {
 n_ok  <- sum(sapply(results, `[[`, "status") == "success")
 n_err <- sum(sapply(results, `[[`, "status") == "error")
 cat("\nTotal:", length(results), "scrapers |", n_ok, "succeeded |", n_err, "failed\n")
+
+# ── Refresh the git mirror of the per-source lists ──────────────────────────
+# A scraper writes its metadata next to the documents, in
+# 03_Documents/<source>/List, which is the copy everything reads. The repo's
+# catalogues/<source>/ is a mirror of that, so GitHub carries a catalogue of a
+# corpus that is not itself in git. Nothing reads the mirror, so drift is
+# invisible until someone reads a stale filter note on GitHub: it had been
+# three months out of date, across eight files, before anyone noticed.
+# Running it here is what keeps the two in step.
+if (n_ok > 0) {
+  sync <- file.path(dirname(R_DIR), "04_catalogue", "sync_metadata.R")
+  if (file.exists(sync)) {
+    cat("\n── Refreshing catalogues/ from the corpus lists ──\n")
+    r <- tryCatch({ sys.source(sync, envir = new.env()); TRUE },
+                  error = function(e) { cat("  sync failed:", conditionMessage(e), "\n"); FALSE })
+    if (isTRUE(r)) cat("  done; review with git status, then commit\n")
+  } else {
+    cat("\n  NOTE: sync_metadata.R not found; catalogues/ may now be stale\n")
+  }
+}

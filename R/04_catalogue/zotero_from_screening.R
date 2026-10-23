@@ -1,7 +1,7 @@
 # zotero_from_screening.R - the screening decides what is in Zotero and with
 # which status; the source catalogues supply the metadata.
 #
-# Input: review/scope_screen.csv (one judged document per row; verdict_ruled
+# Input: 04_Screening/scope_screen.csv (one judged document per row; verdict_ruled
 # when screen_rules.R has run) and review/family_census.csv (family and the
 # identifiers read from the cover). The six source builders in
 # zotero_upload.R still run, but as a POOL of metadata keyed by filename:
@@ -20,14 +20,14 @@
 # Sourced by zotero_upload.R; uses its mk_item(), DATA, GL.
 
 build_from_screening <- function(pool) {
-  scr <- file.path(GL, "04_Extraction_Results", "review", "scope_screen.csv")
+  scr <- file.path(GL, "04_Screening", "scope_screen.csv")
   if (!file.exists(scr)) { cli_alert_warning("no scope_screen.csv: statuses stay as the builders set them"); return(pool) }
   sv <- read.csv(scr, stringsAsFactors = FALSE, colClasses = "character", encoding = "UTF-8")
   sv[is.na(sv)] <- ""
   v <- if ("verdict_ruled" %in% names(sv)) sv$verdict_ruled else sv$verdict
   status_of <- c("in scope" = "included", "unsure" = "to screen", "out of scope" = "screened out")
 
-  cen_p <- file.path(GL, "04_Extraction_Results", "review", "family_census.csv")
+  cen_p <- file.path(GL, "04_Screening", "inputs", "decisions", "family_census.csv")
   cen <- NULL
   if (file.exists(cen_p)) {
     cen <- read.csv(cen_p, stringsAsFactors = FALSE, colClasses = "character", encoding = "UTF-8")

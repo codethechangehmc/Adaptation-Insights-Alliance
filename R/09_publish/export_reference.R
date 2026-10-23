@@ -1,6 +1,6 @@
 ##############################################################################
 # export_reference.R - publish the gold-set reference extractions into
-# 04_Extraction_Results, next to the pipeline's own output.
+# 05_Extraction_Results, next to the pipeline's own output.
 #
 # Three things get compared every time the pipeline is scored, and until now
 # two of them lived only as working CSVs in catalogues\. They belong beside
@@ -103,14 +103,14 @@ about <- data.frame(
     "Cells where more than one answer is accepted as correct (a project's short and long title, a figure quoted two ways). The sheets above show the first answer; this lists the others. The scorer counts any of them as a match.",
     "The template's separator for several values in one cell is a SEMICOLON, as the readme sheet says for funder, implementor and location ('GLO18; CON3; FRA33'). The pipeline follows it. The '||' marker in the underlying reference CSVs means 'either answer is acceptable', not 'both values apply', which is why it is split out here rather than shown in a cell.",
     format(Sys.time(), "%Y-%m-%d %H:%M"),
-    "Rscript 05_Pipeline/R/09_publish/export_reference.R",
+    "Rscript 07_Pipeline/R/09_publish/export_reference.R",
     "Neither reference is truth. Both have verified errors, listed in scores/location_extraction_comparison_2026-09-09.md (sections C and D). Read that before treating a disagreement as a pipeline mistake."),
   stringsAsFactors = FALSE)
 addWorksheet(wb, "about")
 writeData(wb, "about", about, headerStyle = hdr)
 setColWidths(wb, "about", cols = 1:2, widths = c(30, 120))
 
-out <- file.path(RESULTS_DIR, "gold_reference.xlsx")
+out <- file.path(REPO, "outputs", "extraction", "gold_reference.xlsx")
 writable <- function(p) {
   if (!file.exists(p)) return(TRUE)
   con <- suppressWarnings(try(file(p, "ab"), silent = TRUE))
