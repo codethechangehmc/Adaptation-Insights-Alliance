@@ -1,0 +1,9 @@
+# Scraper-local environment, review artifacts and persistent data.
+/.venv/
+/data/
+/outputs/
+/downloads/
+__pycache__/
+*.py[codz]
+.ruff_cache/
+*.sqlite3*

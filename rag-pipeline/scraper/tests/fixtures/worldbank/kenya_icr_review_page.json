@@ -1,0 +1,69 @@
+{
+ "total": 45,
+ "documents": {
+  "D24902779": {
+   "id": "24902779",
+   "count": "Kenya",
+   "docty": "Implementation Completion Report Review",
+   "projn": "KE-Energy Sector Recovery Project -- P083131",
+   "lang": "English",
+   "entityids": {
+    "entityid": "090224b08306eaa4_1_0"
+   },
+   "teratopic": "Energy,Law and Development,Private Sector Development",
+   "repnb": "ICRR14654",
+   "docdt": "2015-06-16T04:00:00Z",
+   "repnme": {
+    "repnme": "Kenya - Energy Sector Recovery Project"
+   },
+   "display_title": "Kenya - Energy Sector Recovery Project",
+   "pdfurl": "http://documents.worldbank.org/curated/en/588171468178155964/pdf/ICRR14654-P083131-Box393183B-PUBLIC.pdf",
+   "projectid": "P083131",
+   "guid": "588171468178155964",
+   "url": "http://documents.worldbank.org/curated/en/588171468178155964"
+  },
+  "D24992007": {
+   "id": "24992007",
+   "count": "Kenya",
+   "docty": "Implementation Completion Report Review",
+   "projn": "KE-Total War Against HIV and AIDS (TOWA) Project -- P081712",
+   "lang": "English",
+   "entityids": {
+    "entityid": "090224b0830b4e3f_1_0"
+   },
+   "teratopic": "Health, Nutrition and Population",
+   "repnb": "ICRR14771",
+   "docdt": "2015-06-30T04:00:00Z",
+   "repnme": {
+    "repnme": "Kenya - Total War Against HIV and AIDS (TOWA) Project"
+   },
+   "display_title": "Kenya - Total War Against HIV and AIDS (TOWA) Project",
+   "pdfurl": "http://documents.worldbank.org/curated/en/237521468186529547/pdf/ICRR14771-P081712-Box393191B-PUBLIC.pdf",
+   "projectid": "P081712",
+   "guid": "237521468186529547",
+   "url": "http://documents.worldbank.org/curated/en/237521468186529547"
+  },
+  "D26099508": {
+   "id": "26099508",
+   "count": "Kenya",
+   "docty": "Implementation Completion Report Review",
+   "projn": "KE-Kenya - Natural Resource Management Project -- P095050",
+   "lang": "English",
+   "entityids": {
+    "entityid": "090224b08421907e_1_0"
+   },
+   "teratopic": "Environment,Rural Development",
+   "repnb": "ICRR14893",
+   "docdt": "2016-02-23T05:00:00Z",
+   "repnme": {
+    "repnme": "Kenya - Natural Resouces Management Project"
+   },
+   "display_title": "Kenya - Natural Resouces Management Project",
+   "pdfurl": "http://documents.worldbank.org/curated/en/207631468194954362/pdf/ICRR14893-P095050-Box394872B-PUBLIC.pdf",
+   "projectid": "P095050",
+   "guid": "207631468194954362",
+   "url": "http://documents.worldbank.org/curated/en/207631468194954362"
+  },
+  "facets": {}
+ }
+}

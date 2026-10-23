@@ -1,0 +1,109 @@
+{
+    "listing_order":  {
+                          "order":  "field_gef_project_id",
+                          "sort":  "asc"
+                      },
+    "page_size":  30,
+    "max_results_per_query":  null,
+    "focal_areas":  [
+                        "Climate Change",
+                        "Land Degradation"
+                    ],
+    "funding_sources":  [
+                            "Least Developed Countries Fund",
+                            "Special Climate Change Fund"
+                        ],
+    "adaptation_funds":  [
+                             "Least Developed Countries Fund",
+                             "Special Climate Change Fund"
+                         ],
+    "enabling_activity_types":  [
+                                    "Enabling Activity"
+                                ],
+    "document_types":  [
+                           {
+                               "doc_type":  "Tracking Tool",
+                               "pattern":  "TrackingTool|tracking tool|core indicator"
+                           },
+                           {
+                               "doc_type":  "Terminal Evaluation",
+                               "pattern":  "TerminalEvaluationTE_|/TE/|_TE\\.|terminal evaluation|\\bTER?\\b"
+                           },
+                           {
+                               "doc_type":  "Mid-Term Review",
+                               "pattern":  "MidtermReviewMTR_|/MTR/|_MTR\\.|mid-?term review|\\bMTR\\b"
+                           },
+                           {
+                               "doc_type":  "Project Implementation Report",
+                               "pattern":  "ProjectImplementationReportPIR_|\\bPIR\\b|implementation report|year implementation"
+                           },
+                           {
+                               "doc_type":  "Completion Report",
+                               "pattern":  "completion report|\\bICR\\b"
+                           },
+                           {
+                               "doc_type":  "Evaluation",
+                               "pattern":  "evaluation|valuation"
+                           },
+                           {
+                               "doc_type":  "Proposal",
+                               "pattern":  "CEO ?Endorsement|CEO ?Approval|CEO End|\\bPIF\\b|project identification|project document|prodoc|Agencyprojectdocument|review ?sheet|\\bSTAP|GEFSEC|\\bPPG\\b|project proposal|project brief|project concept|\\bPDF[- ]?[ABC]\\b|\\bEA (proposal|request)|enabling activity request|executive summary|appraisal|\\bPAD\\b|\\bPID\\b|MSP document|request for CEO|data ?sheet"
+                           },
+                           {
+                               "doc_type":  "Administrative",
+                               "pattern":  "letter|\\bltr\\b|notification|memo|correspond|co-?financ|portal entry|annex|work ?plan|risk log|SESP|stakeholder|gender|theory of change|taxonomy|screen"
+                           },
+                           {
+                               "doc_type":  "National Report",
+                               "pattern":  "national communication|initial communication|\\bNAPA\\b|biennial|transparency report|strategy"
+                           }
+                       ],
+    "document_decisions":  {
+                               "Terminal Evaluation":  [
+                                                           "keep",
+                                                           ""
+                                                       ],
+                               "Mid-Term Review":  [
+                                                       "keep",
+                                                       ""
+                                                   ],
+                               "Completion Report":  [
+                                                         "keep",
+                                                         ""
+                                                     ],
+                               "Evaluation":  [
+                                                  "keep",
+                                                  ""
+                                              ],
+                               "Project Implementation Report":  [
+                                                                     "drop",
+                                                                     "progress_report"
+                                                                 ],
+                               "Proposal":  [
+                                                "drop",
+                                                "proposal_stage"
+                                            ],
+                               "Tracking Tool":  [
+                                                     "drop",
+                                                     "other_document_type"
+                                                 ],
+                               "Administrative":  [
+                                                      "drop",
+                                                      "other_document_type"
+                                                  ],
+                               "National Report":  [
+                                                       "drop",
+                                                       "other_document_type"
+                                                   ],
+                               "Other":  [
+                                             "to_screen",
+                                             "unknown_document_type"
+                                         ]
+                           },
+    "sweeps":  {
+                   "LDCF":  "funding_source:479",
+                   "SCCF":  "funding_source:490",
+                   "Land Degradation":  "focal_areas:2210",
+                   "Climate Change":  "focal_areas:2207"
+               }
+}

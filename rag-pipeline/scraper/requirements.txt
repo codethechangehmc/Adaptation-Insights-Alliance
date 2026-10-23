@@ -1,0 +1,4 @@
+# Scrapers. The optional gef_doc_dates command separately requires PyMuPDF.
+requests==2.34.2
+beautifulsoup4==4.15.0
+lxml==6.1.3

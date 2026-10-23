@@ -1,0 +1,19 @@
+[project]
+name = "adaptation-insights-scraper"
+version = "0.1.0"
+description = "Standalone retrieval for the Adaptation Insights grey literature evidence base."
+requires-python = ">=3.10"
+
+[tool.ruff]
+line-length = 99
+target-version = "py310"
+src = ["."]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "C90", "D", "ANN"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10

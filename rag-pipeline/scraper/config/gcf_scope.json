@@ -1,0 +1,16 @@
+{
+  "checked": "2026-10-15",
+  "max_results_per_query": null,
+  "project_filters": {
+    "region": "Africa",
+    "theme": "Adaptation"
+  },
+  "document_types": [
+    "Evaluation report",
+    "Project completion report",
+    "Project completion summary"
+  ],
+  "pagination": "Follow rel=next; verify terminal empty fragment. CPR family totals checked separately.",
+  "cpr_fund": "agent::Green Climate Fund",
+  "status_note": "All project statuses are enumerated, including under implementation."
+}
