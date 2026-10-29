@@ -71,15 +71,21 @@ def resolve(doc: dict, ref: dict):
 
 def iter_blocks(doc: dict):
     """
-    Yield ("text", item) / ("table", item) in reading order (body.children order).
-    Groups (key-value areas, lists) and pictures are walked into: the group itself has no text, its
-    children do. A table's own children are its footnotes; those are read via table["footnotes"] instead.
+    Yield ("text", item) / ("table", item) / ("picture", (index, item)) in reading order (body.children order).
+    Groups (key-value areas, lists) are walked into: the group itself has no text, its children do.
+    A picture is yielded whole: its caption and the text labels inside it (chart values, axis labels,
+    diagram boxes) are rendered together as one figure block by render_figure(). Any table nested in a
+    picture is still yielded as a table. A table's own children are its footnotes; those are read via
+    table["footnotes"] instead.
     """
     def walk(children):
         for ref in children:
             coll, item = resolve(doc, ref)
-            if coll in ("groups", "pictures"):
+            if coll == "groups":
                 yield from walk(item.get("children", []))
+            elif coll == "pictures":
+                yield ("picture", (int(ref["$ref"].split("/")[-1]), item))
+                yield from (b for b in walk(item.get("children", [])) if b[0] == "table")
             elif coll == "texts":
                 yield ("text", item)
                 yield from walk(item.get("children", []))
@@ -118,11 +124,63 @@ def is_margin_stamp(doc: dict, item: dict) -> bool:
     return bb["r"] < MARGIN_PT or bb["l"] > width - MARGIN_PT
 
 
-def render_text(doc: dict, item: dict, stats: Counter):
+EDGE_TOP_FRAC = 0.12     # running headers sit in the top 12% of the page...
+EDGE_BOTTOM_FRAC = 0.10  # ...and running footers / page numbers in the bottom 10%
+PAGE_NUMBER_RE = re.compile(r"(page\s+)?[#ivxlc]{1,6}(\s*(of|/)\s*#)?", re.I)   # matched against repeat_key()
+
+
+def repeat_key(text: str) -> str:
+    """Lowercase, digits -> '#', spaces collapsed: 'Page 8 of 53' and 'Page 9 of 53' get the same key."""
+    return re.sub(r"\s+", " ", re.sub(r"\d+", "#", text.lower())).strip()
+
+
+def furniture_keys(doc: dict) -> set:
+    """Keys of every text Docling marked as a page header/footer somewhere in this document."""
+    keys = set()
+    for t in doc["texts"]:
+        if t.get("content_layer") == "furniture" or t.get("label") in ("page_header", "page_footer"):
+            k = repeat_key(t.get("text", ""))
+            if len(re.sub(r"\W", "", k)) >= 3:
+                keys.add(k)
+    return keys
+
+
+def is_missed_furniture(doc: dict, item: dict, furn: set) -> bool:
+    """
+    Docling marks most running headers/footers as furniture but misses some copies: 'The World Bank' was
+    furniture on 10 pages of P001 and plain text (or even a section_header) on 20 others. We only drop an
+    item if BOTH hold:
+      1. it sits in the top/bottom edge strip of its page, and
+      2. it is a bare page number ('14', 'iii', 'Page 2 of 53'), or its text matches something Docling
+         itself marked as a header/footer elsewhere in the same document.
+    So we never decide on our own that a line is a header; we only catch copies Docling missed.
+    (A plain 'repeats on 3+ pages' rule was rejected: it also caught real headings like '1. Introduction'
+    at the top of each P002 country case study.)
+    """
+    prov = item.get("prov") or []
+    text = item.get("text", "")
+    if not prov or len(text) > 200:
+        return False
+    _, h = page_size(doc, prov[0]["page_no"])
+    top, bottom = y_range(prov[0]["bbox"], h)
+    if not (h - top < EDGE_TOP_FRAC * h or bottom < EDGE_BOTTOM_FRAC * h):
+        return False
+    k = repeat_key(text)
+    if PAGE_NUMBER_RE.fullmatch(k):
+        return True
+    if len(re.sub(r"\W", "", k)) < 3:
+        return False
+    return k in furn or (len(k) >= 6 and any(k in f for f in furn))
+
+
+def render_text(doc: dict, item: dict, stats: Counter, furn: set | None = None):
     """Return (kind, level, text) or None if the item should be invisible."""
     label = item.get("label")
     if item.get("content_layer") == "furniture" or label in ("page_header", "page_footer"):
         stats["furniture_dropped"] += 1
+        return None
+    if furn is not None and label in ("text", "section_header", "title") and is_missed_furniture(doc, item, furn):
+        stats["running_headers_dropped"] += 1
         return None
     text = clean_text(item.get("text", ""))
     if not text:
@@ -252,7 +310,26 @@ def place_footnotes(blocks: list, notes: list) -> list:
 # --------------------------------------------------------------------------
 # Tables
 # --------------------------------------------------------------------------
-def grid(item: dict):
+def rich_cell_text(doc: dict, cell: dict) -> str:
+    """
+    A 'rich' cell has empty text and a ref to a group holding the real items (P001 p.42: a boxed list that
+    Docling stored as a 1x1 table whose only cell points at two list items). Read those items in order so
+    the content isn't lost. The items hang under the table, so iter_blocks() never emits them twice.
+    """
+    out = []
+
+    def walk(ref):
+        coll, it = resolve(doc, ref)
+        if coll == "texts" and it.get("text"):
+            out.append(it["text"])
+        for ch in it.get("children", []):
+            walk(ch)
+    if cell.get("ref"):
+        walk(cell["ref"])
+    return " ".join(out)
+
+
+def grid(item: dict, doc: dict | None = None):
     """
     Build rows from table_cells (NOT from `grid`, which repeats spanning cells).
     rows[r][c] is: the cell text at the cell's first column, None where a horizontal span covers it,
@@ -267,7 +344,8 @@ def grid(item: dict):
     for c in d["table_cells"]:
         r0, r1 = c["start_row_offset_idx"], min(c["end_row_offset_idx"], n_rows)
         c0, c1 = c["start_col_offset_idx"], min(c["end_col_offset_idx"], n_cols)
-        text = clean_text(c.get("text", "")).replace("|", "/")   # keep "|" for structure only
+        raw = c.get("text", "") or (rich_cell_text(doc, c) if doc else "")
+        text = clean_text(raw).replace("|", "/")   # keep "|" for structure only
         for r in range(r0, r1):
             for k in range(c0, c1):
                 rows[r][k] = text if k == c0 else None
@@ -304,10 +382,30 @@ def peel(rows, flags):
     while i < len(rows) - 1 and i < 3 and is_title_row(rows[i]):
         titles.append(nonempty(rows[i])[0])
         i += 1
-    while i < len(rows) - 1 and flags[i] and all(flags[i]):
+    while i < len(rows) - 1 and is_header_row(rows[i], flags[i]):
         header.append(rows[i])
         i += 1
     return titles, header, rows[i:]
+
+
+VALUE_RE = re.compile(r"^\W*(US\$|\$|\u20ac|\u00a3)?\s*\d")   # starts like a number/amount: '8', '19%', '0.00', 'US$86.2 million'
+
+
+def is_header_row(row, row_flags) -> bool:
+    """
+    Use Docling's own column_header flags. Docling consistently leaves the FIRST column of a header row
+    unflagged ('Indicator Name | Unit of Measure | Baseline ...': every cell flagged except 'Indicator Name'),
+    so requiring all cells to be flagged threw away ~30 real headers. Accept the row if:
+      - every non-empty cell is flagged (as before), or
+      - at least one cell is flagged AND no cell starts like a value. The second condition catches the
+        cases where Docling flagged a data row (continuation pieces such as 'Access to ag inputs | 8 | 19%').
+    No flags at all -> not a header; we don't guess from the text.
+    """
+    if not row_flags or not any(row_flags):
+        return False
+    if all(row_flags):
+        return True
+    return not any(VALUE_RE.match(x) for x in row if x)
 
 
 OVERLAP_FRAC = 0.2      # cells in different rows whose boxes overlap by more than this (of the smaller box)
@@ -402,6 +500,40 @@ def row_line(row) -> str:
     return "| " + " | ".join(x for x in row if x is not None) + " |"
 
 
+def table_captions(doc: dict, chain: list) -> list:
+    """
+    Docling stores a table's caption ('Table 3: Outcome 1 Target and Result Summary') as a child of the
+    table (table["captions"]), so walking the body never reaches it and it was silently dropped (58 across
+    the gold set). Read it from every piece of the chain, without repeats.
+    """
+    out = []
+    for piece in chain:
+        for ref in piece.get("captions", []):
+            t = clean_text(resolve(doc, ref)[1].get("text", ""))
+            if t and t not in out:
+                out.append(t)
+    return out
+
+
+def fill_spans(row, repeat: bool) -> list:
+    """
+    grid() marks positions covered by a horizontal span with None. Dropping them (as we used to) shifts
+    every later cell one column left, so the chunker paired values with the wrong column names (P010
+    break-even table: 943 ha of rice was labelled 'Number of adopting farmers / Rice'). Keep rows full
+    width instead: in HEADER rows a spanning label is repeated over the columns it covers ('Area per crop
+    (ha)' over Maize / Rice / Legumes), in BODY rows the covered positions are left empty so no value is
+    duplicated.
+    """
+    out, last = [], ""
+    for x in row:
+        if x is None:
+            out.append(last if repeat else "")
+        else:
+            out.append(x)
+            last = x
+    return out
+
+
 def build_and_render_table(doc: dict, chain: list) -> dict:
     """
     Render one logical table (a chain of Docling tables joined across page breaks) to a single string.
@@ -411,25 +543,26 @@ def build_and_render_table(doc: dict, chain: list) -> dict:
     Docling wrongly flags their first row as a header (it did for the tables on pages 9 and 10).
     If a continuation repeats the header row at the top of the new page, that repeat is dropped.
     """
-    rows, flags = grid(chain[0])
+    rows, flags = grid(chain[0], doc)
     titles, header, body = peel(rows, flags)
+    captions = table_captions(doc, chain)
+    titles = captions + [t for t in titles if t not in captions]
     for piece in chain[1:]:
-        more, _ = grid(piece)
+        more, _ = grid(piece, doc)
         if header and more and row_line(more[0]) == row_line(header[-1]):
             more = more[1:]
         body.extend(more)
 
-    # Markdown only renders a pipe table if it has a header row + |---| separator. Many of these tables
-    # (e.g. "A. Basic Information") have no real header, so we emit an EMPTY header row instead of
-    # inventing one or promoting a data row. Width = the widest row, since spanning rows are narrower.
-    peel_header = header                      # the REAL header (maybe none); the structured output uses this
-    if not header and body:
-        width = max(len([x for x in r if x is not None]) for r in body)
-        header = [[""] * width]
-    n_cols = max((len([x for x in r if x is not None]) for r in header), default=0)
+    n_cols = chain[0]["data"]["num_cols"]
+    header = [fill_spans(h, repeat=True) for h in header]    # the REAL header (maybe none)
+    body = [fill_spans(r, repeat=False) for r in body]
 
-    table_lines = [row_line(h) for h in header]
-    if header:
+    # Markdown only renders a pipe table if it has a header row + |---| separator. Many of these tables
+    # (e.g. "A. Basic Information") have no real header, so the markdown gets an EMPTY header row instead
+    # of an invented one. The structured output keeps header = [] for those.
+    md_header = header or ([[""] * n_cols] if body else [])
+    table_lines = [row_line(h) for h in md_header]
+    if md_header:
         table_lines.append("|" + "---|" * n_cols)
     table_lines.extend(row_line(r) for r in body)
 
@@ -440,10 +573,7 @@ def build_and_render_table(doc: dict, chain: list) -> dict:
         parts.append("Table: " + " / ".join(titles))
     parts.append("\n".join(table_lines))
 
-    # Structured copy for the chunker (sections.json). header is [] when the table has no real header
-    # (the empty header row above exists only so markdown renders). Spanned positions (None) are dropped,
-    # same as in the markdown rows.
-    squash = lambda r: [x for x in r if x is not None]
+    # Structured copy for the chunker (sections.json): every row is n_cols wide, so cell j is column j.
     suspects = []
     for piece in chain:
         suspects += table_suspects(piece)
@@ -451,8 +581,8 @@ def build_and_render_table(doc: dict, chain: list) -> dict:
         "text": "\n\n".join(parts),
         "pages": (chain[0]["prov"][0]["page_no"], chain[-1]["prov"][-1]["page_no"]),
         "title": " / ".join(titles) or None,
-        "header": [squash(h) for h in peel_header],
-        "rows": [squash(r) for r in body],
+        "header": header,
+        "rows": body,
         "suspect": suspects,
     }
 
@@ -597,8 +727,152 @@ def rebuild_continuation(doc: dict, prev: dict, item: dict, text: str, pdf_path)
 
 
 # --------------------------------------------------------------------------
+# Figures (charts, diagrams, pictures)
+# --------------------------------------------------------------------------
+FIGURE_MIN_AREA = 0.05    # an uncaptioned, label-free picture smaller than 5% of the page is not kept (icons, bullets)
+DECORATION_MIN_PAGES = 3  # an uncaptioned, label-free picture at the same spot on 3+ pages is a logo/background
+FIGURE_SCALE = 2.0        # crop resolution: 2 x 72 dpi = 144 dpi, readable for charts without huge files
+FIGURE_PAD_PT = 4
+
+
+def picture_texts(doc: dict, pic: dict, furn: set, stats: Counter | None = None):
+    """
+    (caption, [label texts]) for a picture. Labels are every non-caption text Docling put inside it,
+    minus running-header copies: the World Bank logo carries the words 'The World Bank' as a label, and
+    those must not turn a logo into a 'figure'.
+    """
+    cap_refs = {r["$ref"] for r in pic.get("captions", [])}
+    caption = " ".join(clean_text(resolve(doc, r)[1].get("text", "")) for r in pic.get("captions", [])).strip()
+    labels = []
+
+    def walk(children):
+        for ref in children:
+            coll, it = resolve(doc, ref)
+            if coll == "texts" and ref["$ref"] not in cap_refs and it.get("content_layer") != "furniture":
+                t = clean_text(it.get("text", ""))
+                if t and is_missed_furniture(doc, it, furn):
+                    if stats is not None:
+                        stats["running_headers_dropped"] += 1
+                elif t:
+                    labels.append(t)
+            if coll in ("texts", "groups"):
+                walk(it.get("children", []))
+    walk(pic.get("children", []))
+    return caption, labels
+
+
+def picture_spot(doc: dict, pic: dict):
+    """Position key, rounded to 5pt: the same logo on every page lands on the same key."""
+    bb = pic["prov"][0]["bbox"]
+    _, h = page_size(doc, pic["prov"][0]["page_no"])
+    top, bottom = y_range(bb, h)
+    return tuple(round(v / 5) for v in (bb["l"], bb["r"], top, bottom))
+
+
+def decoration_spots(doc: dict, furn: set) -> set:
+    """Spots where an uncaptioned, label-free picture repeats on DECORATION_MIN_PAGES or more pages."""
+    pages_at: dict = {}
+    for pic in doc.get("pictures", []):
+        if not pic.get("prov"):
+            continue
+        cap, labels = picture_texts(doc, pic, furn)
+        if cap or labels:
+            continue
+        pages_at.setdefault(picture_spot(doc, pic), set()).add(pic["prov"][0]["page_no"])
+    return {k for k, v in pages_at.items() if len(v) >= DECORATION_MIN_PAGES}
+
+
+def render_figure(doc: dict, idx: int, pic: dict, deco: set, furn: set, stats: Counter):
+    """
+    A picture -> one figure block, or None if it isn't worth keeping. Kept if it has a caption, or text
+    labels, or covers FIGURE_MIN_AREA of the page; dropped if it's a label-free repeat (logo, page
+    background) or a small label-free icon. The block points at a PNG crop (written later by
+    save_figures) because a chart's meaning is in the picture: the labels alone can't say which bar is
+    which value. The caption + labels are kept as text so the figure is still found by search.
+    """
+    if pic.get("content_layer") == "furniture" or not pic.get("prov"):
+        stats["figures_skipped_furniture"] += 1
+        return None
+    caption, labels = picture_texts(doc, pic, furn, stats)
+    prov = pic["prov"][0]
+    page = prov["page_no"]
+    if not caption and not labels:
+        if picture_spot(doc, pic) in deco:
+            stats["figures_skipped_repeated"] += 1
+            return None
+        w, h = page_size(doc, page)
+        bb = prov["bbox"]
+        if abs((bb["r"] - bb["l"]) * (bb["t"] - bb["b"])) < FIGURE_MIN_AREA * w * h:
+            stats["figures_skipped_small"] += 1
+            return None
+    stats["figures"] += 1
+    image = f"figures/fig_{idx:03d}_p{page}.png"
+    parts = ["Figure: " + (caption or "(no caption)")]
+    if labels:
+        parts.append("Figure text: " + "; ".join(labels))
+    return {"kind": "figure", "level": 0, "text": "\n".join(parts), "pages": (page, page),
+            "caption": caption or None, "labels": "; ".join(labels), "image": image,
+            "_crop": (page, prov["bbox"])}
+
+
+def save_figures(doc: dict, blocks: list, pdf_path, fig_dir, stats: Counter) -> None:
+    """
+    Crop each kept figure out of the PDF page (pypdfium2, which Docling already installs) and save it as
+    PNG in fig_dir. Files are overwritten, never deleted. Names use Docling's picture index, which is
+    fixed for a given docling.json, so reruns write the same names. Without the PDF the figure keeps its
+    text but gets image = None.
+    """
+    figs = [b for b in blocks if b["kind"] == "figure"]
+    if not figs:
+        return
+    if not (pdf_path and fig_dir):
+        for b in figs:
+            b["image"] = None
+        stats["figures_not_cropped_no_pdf"] += len(figs)
+        return
+    import pypdfium2 as pdfium
+    from pathlib import Path
+    fig_dir = Path(fig_dir)
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    pdf = pdfium.PdfDocument(str(pdf_path))
+    try:
+        for b in figs:
+            page_no, bb = b["_crop"]
+            page = pdf[page_no - 1]
+            w, h = page.get_size()
+            top, bottom = y_range(bb, h)
+            box = (max(bb["l"] - FIGURE_PAD_PT, 0), max(h - top - FIGURE_PAD_PT, 0),
+                   min(bb["r"] + FIGURE_PAD_PT, w), min(h - bottom + FIGURE_PAD_PT, h))
+            img = page.render(scale=FIGURE_SCALE).to_pil()
+            img.crop(tuple(round(v * FIGURE_SCALE) for v in box)).save(fig_dir / Path(b["image"]).name)
+            stats["figures_saved"] += 1
+    finally:
+        pdf.close()
+
+
+# --------------------------------------------------------------------------
 # Whole document -> blocks -> markdown / sections
 # --------------------------------------------------------------------------
+TOC_PAGE_RE = re.compile(r"(p\.?\s*)?[\divxlc]+(\s*-\s*[\divxlc]+)?", re.I)
+
+
+def looks_like_toc(item: dict) -> bool:
+    """
+    Docling labels list-like tables near the front as document_index. Most are tables of contents, but
+    P005's acronym list got the label too and was dropped. Only treat it as a TOC if it has the TOC shape:
+    dot leaders anywhere, or a page number ('7', 'ii-iv', 'p. 6') ending at least 40% of its rows.
+    """
+    rows, _ = grid(item)
+    filled = [[x for x in r if x] for r in rows]
+    filled = [r for r in filled if r]
+    if not filled:
+        return True
+    if any(re.search(r"\.{4,}|…{2,}", x) for r in filled for x in r):
+        return True
+    ends = sum(1 for r in filled if TOC_PAGE_RE.fullmatch(r[-1].strip()))
+    return ends >= 0.4 * len(filled)
+
+
 def render_document(doc: dict, stats: Counter, pdf_path=None) -> list:
     """
     Return blocks in reading order: {"kind": "heading"|"text"|"table", "text", "level", "pages": (first, last)}.
@@ -606,6 +880,8 @@ def render_document(doc: dict, stats: Counter, pdf_path=None) -> list:
     margin stamps are invisible (they don't break a chain); real text or a dropped TOC does.
     """
     blocks, chain = [], []
+    furn = furniture_keys(doc)
+    deco = decoration_spots(doc, furn)
 
     def flush():
         nonlocal chain
@@ -619,8 +895,14 @@ def render_document(doc: dict, stats: Counter, pdf_path=None) -> list:
             chain = []
 
     for kind, item in iter_blocks(doc):
+        if kind == "picture":
+            fig = render_figure(doc, item[0], item[1], deco, furn, stats)
+            if fig:                       # a kept figure is visible content: it ends a table chain
+                flush()
+                blocks.append(fig)
+            continue                      # a skipped logo/icon is invisible, like furniture
         if kind == "text":
-            r = render_text(doc, item, stats)
+            r = render_text(doc, item, stats, furn)
             if r is None:
                 continue
             if chain and r[0] == "text" and item.get("label") in ("title", "section_header"):
@@ -640,9 +922,11 @@ def render_document(doc: dict, stats: Counter, pdf_path=None) -> list:
             blocks.append({"kind": r[0], "level": r[1], "text": r[2], "pages": (page, prov[-1]["page_no"] if prov else None)})
         else:
             if item.get("label") == "document_index":     # Docling's own label for a table of contents
-                stats["index_tables_dropped"] += 1
-                flush()
-                continue
+                if looks_like_toc(item):
+                    stats["index_tables_dropped"] += 1
+                    flush()
+                    continue
+                stats["index_tables_kept_not_toc"] += 1     # e.g. an acronym list: keep it as a table
             if chain and continues(doc, chain[-1], item):
                 chain.append(item)
             else:
@@ -656,9 +940,13 @@ def to_markdown(blocks: list) -> str:
     parts = []
     for b in blocks:
         if b["kind"] == "heading":
-            parts.append("#" * b["level"] + " " + b["text"])
+            parts.append("#" * min(b["level"], 6) + " " + b["text"])   # markdown has 6 levels; sections.json keeps the real level
         elif b["kind"] == "footnote":
             parts.append("Footnote: " + b["text"])
+        elif b["kind"] == "figure":
+            img = f"![{b['caption'] or 'figure'}]({b['image']})" if b["image"] else "(image not saved: PDF missing)"
+            first, _, rest = b["text"].partition("\n")
+            parts.append("\n\n".join(x for x in (first, img, rest) if x))
         else:
             parts.append(b["text"])
     return "\n\n".join(parts)
@@ -674,10 +962,15 @@ def typed_item(b: dict) -> dict:
       {"type": "table",    "title", "header" (list of rows, [] if none), "rows", "text" (rendered markdown),
                            "pages", and "suspect" (reasons) only if the table looks mis-parsed}
       {"type": "footnote", "text", "page"}
+      {"type": "figure",   "caption" (or None), "labels" (text found inside the picture), "image"
+                           (path of the PNG crop relative to the paper folder, or None), "text", "pages"}
     A table is ONE item, so the chunker can keep it whole, or split `rows` and repeat title + header.
     """
     if b["kind"] == "footnote":
         return {"type": "footnote", "text": b["text"], "page": b["pages"][0]}
+    if b["kind"] == "figure":
+        return {"type": "figure", "caption": b["caption"], "labels": b["labels"], "image": b["image"],
+                "text": b["text"], "pages": list(b["pages"])}
     if b["kind"] == "table":
         item = {"type": "table", "title": b["title"], "header": b["header"], "rows": b["rows"],
                 "text": b["text"], "pages": list(b["pages"])}
@@ -722,10 +1015,29 @@ def to_sections(blocks: list, stats: Counter) -> list:
     return kept
 
 
-def process(doc: dict, pdf_path=None):
+def pages_without_text(doc: dict) -> list:
+    """
+    Pages where Docling found no body text and no table: usually scanned or image-only pages (P007's
+    questionnaire screenshots and attendance lists). Nothing from them reaches clean.md, so list them in
+    meta.json for a human to check. We don't OCR them (yet).
+    """
+    seen = set()
+    for coll in ("texts", "tables"):
+        for it in doc.get(coll, []):
+            if it.get("content_layer") == "furniture" or it.get("label") in ("page_header", "page_footer"):
+                continue
+            if coll == "texts" and not it.get("text", "").strip():
+                continue
+            for pr in it.get("prov", []):
+                seen.add(pr["page_no"])
+    return sorted(int(p) for p in doc.get("pages", {}) if int(p) not in seen)
+
+
+def process(doc: dict, pdf_path=None, fig_dir=None):
     """docling.json dict (+ the source PDF, if available, for rebuilding rows) -> (clean_markdown, sections, stats)."""
     stats: Counter = Counter()
     blocks = render_document(doc, stats, pdf_path)
+    save_figures(doc, blocks, pdf_path, fig_dir, stats)
     sections = to_sections(blocks, stats)
     out_stats = dict(stats)
     review = [{"pages": list(b["pages"]), "title": b["title"], "reasons": b["suspect"]}
@@ -734,4 +1046,5 @@ def process(doc: dict, pdf_path=None):
     if review:
         out_stats["suspect_table_list"] = review      # tables a human should check against the PDF
     out_stats.setdefault("headings_demoted_long", 0)  # always present, like suspect_tables (0 = nothing demoted)
+    out_stats["pages_without_text"] = pages_without_text(doc)
     return to_markdown(blocks), sections, out_stats

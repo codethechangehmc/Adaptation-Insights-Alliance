@@ -13,6 +13,7 @@ Per-paper outputs (data/parsed/<paper_id>/):
     raw.md          Docling's markdown, untouched (for before/after comparison)
     clean.md        rendered from docling.json by postprocess.py (spans fixed, footnotes kept, furniture dropped)
     sections.json   clean.md split by headings, with heading path + page numbers (input for chunking)
+    figures/        PNG crop of each kept chart/diagram/picture (referenced from clean.md and sections.json)
     meta.json       run info + fix counts; written LAST, so it doubles as the "done" marker
 
 All cleanup logic (text cleaning, tables, sections) lives in postprocess.py. This file only
@@ -59,7 +60,7 @@ def get_converter():
 def render_outputs(out: Path, pdf_path: Path | None = None) -> tuple[list, dict]:
     """docling.json -> clean.md + sections.json. Pure function of the saved JSON, so it is cheap to rerun."""
     doc = json.loads((out / "docling.json").read_text(encoding="utf-8"))
-    clean_md, sections, stats = postprocess.process(doc, pdf_path)
+    clean_md, sections, stats = postprocess.process(doc, pdf_path, out / "figures")
     (out / "clean.md").write_text(clean_md, encoding="utf-8")
     (out / "sections.json").write_text(
         json.dumps({"sections": sections}, indent=4, ensure_ascii=False), encoding="utf-8")

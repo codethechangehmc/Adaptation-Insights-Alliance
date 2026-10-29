@@ -403,6 +403,43 @@ class PaperChunker:
             })
             self.pos += 1
 
+    # ---- figures ----------------------------------------------------------
+
+    def add_figure(self, item):
+        """A figure (chart, diagram, picture) becomes its own chunk: caption + the text found inside it,
+        with the path of its PNG crop in `image` so the extraction step can show the picture to a model
+        that reads images (the labels alone can't say which bar has which value). Like a table, it ends the
+        running text chunk. A figure with very long label text (big diagrams) is split, caption repeated."""
+        while self.buf and self.buf[-1][1] is None:
+            t, _, _ = self.buf.pop()
+            self.buf_tokens -= self.count(t)
+            if len(self.buf_headings) > 1:
+                self.buf_headings.pop()
+        self.flush()
+        caption = (item.get("caption") or "").strip()
+        head = "Figure: " + (caption or "(no caption)")
+        labels = (item.get("labels") or "").strip()
+        room = max(self.a.max_tokens - self.count(head) - 10, 50)
+        pieces = split_long_text(labels, room, self.count) if labels else [""]
+        if len(pieces) > 1:
+            self.stats["figures_split"] += 1
+        pages = item_pages(item)
+        for k, piece in enumerate(pieces):
+            part = f" (part {k + 1} of {len(pieces)})" if len(pieces) > 1 else ""
+            text = head + part + (("\nFigure text: " + piece) if piece else "")
+            self.chunks.append({
+                "type": "figure",
+                "section_kind": self.cur_kind,
+                "data_section": self.cur_data,
+                "heading_path": list(self.cur_path),
+                "headings": [self.cur_path[-1]] if self.cur_path else [],
+                "pages": list(pages) if pages else None,
+                "text": text,
+                "image": item.get("image"),
+                "_order": self.pos,
+            })
+            self.pos += 1
+
     # ---- footnotes --------------------------------------------------------
 
     def attach_footnotes(self):
@@ -489,6 +526,8 @@ class PaperChunker:
                     last_text = text
                 elif typ == "table":
                     self.add_table(it, last_text)
+                elif typ == "figure":
+                    self.add_figure(it)
                 elif typ == "footnote":
                     pr = item_pages(it)
                     if text and pr:
@@ -546,6 +585,7 @@ class PaperChunker:
                 "table": c.get("table"),
                 "suspect_table": c.get("suspect_table", False),
                 "suspect_reasons": c.get("suspect_reasons", []),
+                "image": c.get("image"),     # figures only: PNG path relative to data/parsed/<paper_id>/
             }
             out.append(rec)
         return out
@@ -595,6 +635,8 @@ def dump_md(chunks, path):
         lines.append(f"**Section:** {' > '.join(c['heading_path']) or '(none)'}")
         if len(c["headings"]) > 1:
             lines.append(f"**Also covers:** {'; '.join(c['headings'][1:])}")
+        if c.get("image"):
+            lines.append(f"**Image:** {c['image']}")
         lines.append("")
         lines.append(c["text"])
         lines.append("\n---\n")
