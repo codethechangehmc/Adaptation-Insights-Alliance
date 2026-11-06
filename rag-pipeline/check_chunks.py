@@ -36,6 +36,11 @@ STOPWORDS = set("""a an the of in on at to for by with from and or as is are was
 that this these those which who whom its it their there than per into under over not no
 share number total overall project projects programme program""".split())
 
+# Gold rows whose values come from a different document than gold_v1_general.csv
+# lists. P003 and P004 are programs covered by the GEF food systems evaluation
+# (P002_doc3); the gold reference took their values from that report.
+PAPER_OVERRIDES = {"P003": "P002_doc3", "P004": "P002_doc3"}
+
 SPACES_RE = re.compile(r"[    ]")   # non-breaking / thin spaces
 
 
@@ -74,7 +79,8 @@ def variants(raw):
     else:
         s = repr(v).rstrip("0").rstrip(".")
         exact += [s, s.replace(".", ",")]
-    for scale, words in ((1e9, ("billion", "bn")), (1e6, ("million", "mn", "m"))):
+    for scale, words in ((1e9, ("billion", "bn")), (1e6, ("million", "mn", "m")),
+                         (1e3, ("thousand", "k"))):     # '350 thousand ha
         if v >= scale:
             x = v / scale
             forms = {f"{x:.1f}", f"{x:.2f}"}
@@ -90,9 +96,10 @@ def variants(raw):
 
 def number_pattern(form):
     """Match the form as a whole number: not glued to other digits, and not
-    the start/end of a longer number like 4,612,9460 or 1.25."""
+    the start/end of a longer number like 4,612,9460 or 1.25. Trailing zero
+    decimals are allowed: World Bank results frameworks write 301 as '301.00'."""
     esc = re.escape(form).replace(r"\ ", r"\s")
-    return re.compile(r"(?<![\d])(?<!\d[.,])" + esc + r"(?![\d])(?![.,]\d)", re.I)
+    return re.compile(r"(?<![\d])(?<!\d[.,])" + esc + r"(?:\.0+)?(?![\d])(?![.,]\d)", re.I)
 
 
 # --------------------------------------------------------------------------
@@ -131,6 +138,7 @@ def project_to_paper(general_rows):
         doc = (r.get("document") or "").strip()
         if r.get("project_code") and doc:
             out[r["project_code"].strip()] = Path(doc).stem
+    out.update(PAPER_OVERRIDES)
     return out
 
 

@@ -29,7 +29,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-CHUNKER_VERSION = "0.1"
+CHUNKER_VERSION = "0.2"
 PARSED_DIR = Path("data/parsed")
 DEFAULT_DOC_INDEX = Path("data/doc_index.csv")
 ERROR_LOG = Path("data/chunk_errors.log")
@@ -98,6 +98,8 @@ TOC_RE = re.compile(r"^\s*(table of contents|contents|sommaire|table des mati[e�
 NUM_PREFIX = r"^\s*(?:(?:\d+\.)*\d+\.?\s*)?"
 REF_RE = re.compile(NUM_PREFIX + r"(references|bibliography|works cited|literature cited|r[ée]f[ée]rences)\b", re.I)
 ANNEX_RE = re.compile(NUM_PREFIX + r"(annex|annexe|annexes|appendix|appendices|attachment)\b", re.I)
+# "Lists of" (tables, boxes, annexes...) that belong to the table of contents.
+TOC_LIST_RE = re.compile(r"^\s*(list of )?(tables|figures|boxes|maps|charts|graphs|annexes|appendices)\s*:?\s*$", re.I)
 DATA_RE = re.compile(r"\b(data ?sheet|results framework|results matrix|logical framework|logframe)\b", re.I)
 
 
@@ -129,19 +131,38 @@ def classify_sections(sections):
     contents. Annex and references are 'sticky': everything after an Annex
     heading is annex until a References heading (and vice versa). Data-heavy
     sections (data sheet, results framework) are flagged wherever they are,
-    since e.g. World Bank ICRs put the data sheet at the front."""
+    since e.g. World Bank ICRs put the data sheet at the front.
+
+    A heading with no text directly under it ('Appendix 1: Terms of Reference'
+    followed straight by 'BACKGROUND') never becomes a section of its own, so
+    it is only visible in its children's heading_path. Parents therefore count
+    too, but only to leave the body: a parent never switches annex <->
+    references (that's what the section's own heading is for). A data-heavy
+    parent ('ANNEX 1. RESULTS FRAMEWORK') flags its children as data too."""
     state = "body"
     for s in sections:
         h = (s.get("heading") or "").strip()
-        if TOC_RE.match(h):
+        # postprocess drops the TOC section but leaves its heading in later
+        # sections' heading_path (all of P001's body sits "under" it). Remove it
+        # from paths; a "list of" heading directly under it is part of the TOC.
+        raw_path = s.get("heading_path") or []
+        toc_parent = len(raw_path) > 1 and bool(TOC_RE.match(raw_path[-2]))
+        s["heading_path"] = [p for p in raw_path if not TOC_RE.match(p)]
+        if TOC_RE.match(h) or (TOC_LIST_RE.match(h) and (toc_parent or h.lower().startswith("list of"))):
             s["_kind"] = "toc"
             continue
+        parents = [p.strip() for p in s["heading_path"][:-1]]
         if ANNEX_RE.match(h):
             state = "annex"
         elif REF_RE.match(h):
             state = "references"
+        elif state == "body":
+            if any(ANNEX_RE.match(p) for p in parents):
+                state = "annex"
+            elif any(REF_RE.match(p) for p in parents):
+                state = "references"
         s["_kind"] = state
-        s["_data"] = bool(DATA_RE.search(h))
+        s["_data"] = bool(DATA_RE.search(h)) or any(DATA_RE.search(p) for p in parents)
 
 
 def find_running_headers(sections, min_pages, max_chars=120):
@@ -405,11 +426,13 @@ class PaperChunker:
 
     # ---- figures ----------------------------------------------------------
 
-    def add_figure(self, item):
+    def add_figure(self, item, context=None):
         """A figure (chart, diagram, picture) becomes its own chunk: caption + the text found inside it,
         with the path of its PNG crop in `image` so the extraction step can show the picture to a model
         that reads images (the labels alone can't say which bar has which value). Like a table, it ends the
-        running text chunk. A figure with very long label text (big diagrams) is split, caption repeated."""
+        running text chunk. A figure with very long label text (big diagrams) is split, caption repeated.
+        Like tables, its embedding gets a "Context:" line (end of the text just before it), because many
+        figures have no caption and only numbers as labels, which leaves nothing to search on."""
         while self.buf and self.buf[-1][1] is None:
             t, _, _ = self.buf.pop()
             self.buf_tokens -= self.count(t)
@@ -436,6 +459,7 @@ class PaperChunker:
                 "pages": list(pages) if pages else None,
                 "text": text,
                 "image": item.get("image"),
+                "_context": context,
                 "_order": self.pos,
             })
             self.pos += 1
@@ -502,8 +526,8 @@ class PaperChunker:
     # ---- driver -----------------------------------------------------------
 
     def run(self, sections):
+        classify_sections(sections)      # first: it also strips the TOC from heading paths
         infer_heading_paths(sections)
-        classify_sections(sections)
         running = find_running_headers(sections, self.a.header_min_pages)
 
         for s in sections:
@@ -527,7 +551,7 @@ class PaperChunker:
                 elif typ == "table":
                     self.add_table(it, last_text)
                 elif typ == "figure":
-                    self.add_figure(it)
+                    self.add_figure(it, last_text)
                 elif typ == "footnote":
                     pr = item_pages(it)
                     if text and pr:
@@ -554,16 +578,16 @@ class PaperChunker:
                 prefix.append(f"Part: {c['section_kind']}")
             head = " | ".join(prefix)
 
+            ctx = c.pop("_context", None)
+            ctx_line = ("Context: " + " ".join(ctx.split()[-60:])) if ctx else None
             if c["type"] == "table":
-                body = []
-                ctx = c.pop("_context", None)
-                if ctx:
-                    words = ctx.split()
-                    body.append("Context: " + " ".join(words[-60:]))
+                body = [ctx_line] if ctx_line else []
                 if c["table"]["title"]:
                     body.append(f"Table: {c['table']['title']}")
                 body.append(c.pop("_embed_body"))
                 embed = head + "\n\n" + "\n".join(body)
+            elif c["type"] == "figure" and ctx_line:
+                embed = head + "\n\n" + ctx_line + "\n" + c["text"]
             else:
                 embed = head + "\n\n" + c["text"]
 
