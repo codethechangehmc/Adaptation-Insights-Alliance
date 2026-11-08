@@ -16,18 +16,6 @@ from core.matching import find_keywords, is_african, parse_date
 from core.searching import SearchResult
 
 API = "https://api.climatepolicyradar.org"
-# Catalogue columns of every CPR record, used by AF and GCF.
-EXTRA_FIELDS = [
-    "source_country",
-    "region_labels",
-    "family_id",
-    "project_title",
-    "abstract",
-    "topics",
-    "project_end_date",
-    "source_url",
-    "retrieval_channel",
-]
 EVALUATION = re.compile(
     r"evaluat|mid[- ]?term review|completion (?:report|summary)", re.IGNORECASE
 )

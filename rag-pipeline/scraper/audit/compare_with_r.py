@@ -226,6 +226,9 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--run", type=Path, help="Python run folder containing decisions.csv")
     parser.add_argument("--state", type=Path, help="audit all persistent state instead of one run")
     parser.add_argument(
+        "--output-dir", type=Path, help="audit report folder (keeps older audits intact)"
+    )
+    parser.add_argument(
         "--r-file",
         type=Path,
         action="append",
@@ -286,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
     rows = compare(python_rows, r_rows)
     if args.download_dir:
         check_downloads(rows, args.download_dir)
-    output = review / "r_comparison.csv"
+    output = (args.output_dir or review) / "r_comparison.csv"
     output.parent.mkdir(parents=True, exist_ok=True)
     storage.write_csv(output, rows, FIELDS)
     references = [row for row in rows if row["membership"] != "python_only"]

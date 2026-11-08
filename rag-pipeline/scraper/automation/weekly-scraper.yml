@@ -1,0 +1,97 @@
+# Activation: copy to .github/workflows/weekly-scraper.yml on the default branch.
+# This template stays under rag-pipeline to respect the repository edit scope.
+name: Weekly scraper with Zotero checkpoints
+
+on:
+  schedule:
+    - cron: "23 3 * * 1"
+      timezone: America/Los_Angeles
+  workflow_dispatch:
+    inputs:
+      metadata_only:
+        description: Search without downloading new reports (first-run check)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# Keep a single writer across branches sharing this Zotero checkpoint parent.
+concurrency:
+  group: scraper-zotero-checkpoint
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      PYTHONUNBUFFERED: "1"
+      SCRAPER_DATA_DIR: rag-pipeline/scraper/data/weekly
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: rag-pipeline/scraper/requirements.txt
+
+      - name: Install scraper dependencies
+        run: python -m pip install -r rag-pipeline/scraper/requirements.txt
+
+      - name: Restore the committed Zotero checkpoint
+        id: restore
+        env:
+          ZOTERO_API_KEY: ${{ secrets.ZOTERO_API_KEY }}
+          ZOTERO_LIBRARY_TYPE: ${{ vars.ZOTERO_LIBRARY_TYPE || 'groups' }}
+          ZOTERO_LIBRARY_ID: ${{ vars.ZOTERO_LIBRARY_ID }}
+          ZOTERO_CHECKPOINT_ITEM_KEY: ${{ vars.ZOTERO_CHECKPOINT_ITEM_KEY }}
+        run: >-
+          python rag-pipeline/scraper/run.py zotero_checkpoint restore
+          --data-dir "$SCRAPER_DATA_DIR"
+          --archive "${{ runner.temp }}/restored-checkpoint.zip"
+
+      - name: Retrieve all sources
+        id: scrape
+        timeout-minutes: 240
+        env:
+          METADATA_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.metadata_only }}
+        shell: bash
+        run: |
+          options=()
+          if [[ "$METADATA_ONLY" == "true" ]]; then options+=(--metadata-only); fi
+          set +e
+          python rag-pipeline/scraper/run_all.py \
+            --output-dir "$SCRAPER_DATA_DIR/outputs" \
+            --download-dir "$SCRAPER_DATA_DIR/downloads" "${options[@]}"
+          result=$?
+          echo "finished=true" >> "$GITHUB_OUTPUT"
+          exit "$result"
+
+      # Save completed work even if a source failed, preserving the red run result.
+      # A cancelled/timed-out batch without the finished marker is not promoted.
+      - name: Verify and commit the next Zotero checkpoint
+        if: ${{ !cancelled() && steps.scrape.outputs.finished == 'true' }}
+        env:
+          ZOTERO_API_KEY: ${{ secrets.ZOTERO_API_KEY }}
+          ZOTERO_LIBRARY_TYPE: ${{ vars.ZOTERO_LIBRARY_TYPE || 'groups' }}
+          ZOTERO_LIBRARY_ID: ${{ vars.ZOTERO_LIBRARY_ID }}
+          ZOTERO_CHECKPOINT_ITEM_KEY: ${{ vars.ZOTERO_CHECKPOINT_ITEM_KEY }}
+        run: >-
+          python rag-pipeline/scraper/run.py zotero_checkpoint save
+          --data-dir "$SCRAPER_DATA_DIR"
+          --archive "${{ runner.temp }}/checkpoint-${{ github.run_id }}-${{ github.run_attempt }}.zip"
+
+      # Only logs and catalogues go to GitHub; the full corpus stays in Zotero.
+      - name: Save diagnostic outputs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: scraper-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: rag-pipeline/scraper/data/weekly/outputs/
+          if-no-files-found: ignore
+          retention-days: 14

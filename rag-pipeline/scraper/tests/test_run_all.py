@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import run_all
+from core import storage
 
 
 class BatchTests(unittest.TestCase):
@@ -21,6 +22,13 @@ class BatchTests(unittest.TestCase):
 
         def run(source: str, command: list[str]) -> int:
             commands[source] = command
+            folder = root / source
+            folder.mkdir()
+            storage.write_csv(
+                folder / f"{source}_metadata.csv",
+                [{"source": source, "id": "1", "doc_type": "PCR"}],
+                storage.RECORD_FIELDS,
+            )
             barrier.wait()
             return 1 if source == "af" else 0
 
@@ -29,7 +37,10 @@ class BatchTests(unittest.TestCase):
             result = run_all.main(
                 ["--sources", "af", "cif", "--output-dir", str(root), "--metadata-only"]
             )
+            rows = storage.read_csv(root / "metadata.csv")
         self.assertEqual(result, 1)
+        self.assertTrue(all(row["doc_type"] == "PCR" for row in rows))
+        self.assertEqual({(row["source"], row["id"]) for row in rows}, {("af", "1"), ("cif", "1")})
         for source in ("af", "cif"):
             self.assertEqual(commands[source][2], source)
             self.assertIn(str(root / source), commands[source])

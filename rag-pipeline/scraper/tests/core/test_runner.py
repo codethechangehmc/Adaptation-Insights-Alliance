@@ -126,7 +126,6 @@ class RunnerTests(unittest.TestCase):
         storage.write_csv(
             path,
             [record("1", title="Review", project_id="P1", language="French")],
-            storage.RECORD_FIELDS,
         )
         source = fake_source(self.root, {"a": [record("2", title="Review", project_id="P1")]})
         with patch.object(Client, "download", write_pdf):
@@ -134,8 +133,13 @@ class RunnerTests(unittest.TestCase):
             self.run_source(source)
         rows = {row["id"]: row for row in storage.read_csv(self.output / "fake_metadata.csv")}
         self.assertEqual(set(rows), {"1"})
-        self.assertEqual(rows["1"]["filter_reason"], "reference_recall")
-        self.assertEqual(rows["1"]["rule_reason"], "not_english")
+        self.assertEqual(rows["1"]["filter_reason"], "reference_recall: not_english")
+        connection = storage.open_state(self.output / "state.sqlite3")
+        self.assertEqual(
+            storage.load_state(connection)["1"]["record"]["rule_reason"], "not_english"
+        )
+        self.assertEqual(list(rows["1"]), storage.RECORD_FIELDS)
+        connection.close()
         self.assertEqual(self.summaries()[-1]["download_counts"], {"skipped_valid": 1})
 
 

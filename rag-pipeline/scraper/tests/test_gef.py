@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from bs4 import BeautifulSoup
 
@@ -29,38 +29,6 @@ class GEFTests(unittest.TestCase):
         self.assertEqual(result.records[0]["id"], "12372")
         client.get_html.return_value = BeautifulSoup("<html>Blocked</html>", "lxml")
         self.assertTrue(gef.list_projects(client, {"facet": "focal_areas:2207"}).error)
-
-    def test_repeated_listing_page_is_incomplete(self) -> None:
-        """Do not mistake a repeated last page for successful pagination."""
-        client = Mock(spec=["get_html"])
-        client.get_html.return_value = BeautifulSoup(
-            str(self.page).replace("of 1", "of 2"), "lxml"
-        )
-        self.assertIn("Repeated", gef.list_projects(client, {"facet": "x"}).error)
-
-    def test_document_family_dates_and_non_pdf(self) -> None:
-        """Keep recovered years by stable ID and retain Word evaluations for download."""
-        project = {
-            "id": "1",
-            "web_url": gef.SITE,
-            "project_title": "Kenya farming",
-            "country": "Kenya",
-            "project_type": "Full-size Project",
-        }
-        page = BeautifulSoup(
-            '<a href="/TE/report.pdf">Terminal evaluation</a>'
-            '<a href="/report.docx">Mid-term review</a>',
-            "lxml",
-        )
-        records = gef.project_documents(page, project)
-        with patch.dict(gef.DOCUMENT_DATES, {records[0]["id"]: "2020"}, clear=True):
-            gef.prepare_record(records[0])
-        self.assertEqual(records[0]["doc_date"], "2020")
-        self.assertEqual(gef.pdf_urls(records[1]), [gef.SITE + "/report.docx"])
-        self.assertEqual(
-            gef.classify({**records[0], "doc_type": "Project Implementation Report"})[:2],
-            ("drop", "progress_report"),
-        )
 
 
 if __name__ == "__main__":

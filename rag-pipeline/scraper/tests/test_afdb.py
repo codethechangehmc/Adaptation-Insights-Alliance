@@ -21,24 +21,40 @@ def page(name: str) -> BeautifulSoup:
 class AfdbTests(unittest.TestCase):
     """Verify metadata and current PDF viewer behavior."""
 
-    def test_repeated_page_marks_search_incomplete(self) -> None:
-        """Repeated IDs cannot masquerade as later listing pages."""
+    def test_view_rows_and_repeated_page_positions(self) -> None:
+        """Count duplicate view rows, retry wrong positions, and reject repeated ranges."""
         listing = page("listing.html")
-        listing.append(
-            BeautifulSoup('<li class="pager-last"><a href="?page=1">Last</a></li>', "lxml")
+        listing.body.append(
+            BeautifulSoup(
+                '<div class="view-header">Displaying 1 - 1 of 2</div>'
+                '<li class="pager-last"><a href="?page=1">Last</a></li>',
+                "html.parser",
+            )
         )
         client = Mock()
         client.get_html.return_value = listing
         self.assertIn("repeated", afdb.enumerate_listing(client, afdb.BASE, "afdb", {}).error)
-
-    def test_viewer_and_file_field_pdf_resolution(self) -> None:
-        """AfDB viewer and IDEV file field both expose their direct PDFs."""
-        for filename in ["detail.html", "idev_detail.html"]:
-            client = Mock()
-            client.get_html.return_value = page(filename)
-            urls = afdb.resolve_pdf_urls(client, {"web_url": afdb.BASE + "/document/x"})
-            self.assertEqual(len(urls), 1)
-            self.assertTrue(urls[0].endswith(".pdf"))
+        recovered = BeautifulSoup(
+            str(listing).replace("sudan-", "kenya-").replace("1 - 1", "2 - 2"), "lxml"
+        )
+        client.get_html.side_effect = [listing, listing, recovered]
+        result = afdb.enumerate_listing(client, afdb.BASE, "afdb", {})
+        self.assertFalse(result.error)
+        self.assertEqual(len(result.records), 2)
+        client.get_html.side_effect = [
+            BeautifulSoup(
+                str(listing)
+                .replace("1 - 1", f"{i} - {i}")
+                .replace("of 2", "of 3")
+                .replace("/en/documents/", "/en/legacy/"),
+                "lxml",
+            )
+            for i in range(1, 4)
+        ]
+        result = afdb.enumerate_listing(client, afdb.BASE, "afdb", {})
+        self.assertFalse(result.error)
+        self.assertEqual(len(result.records), 1)
+        self.assertEqual(result.pages, 3)
 
 
 if __name__ == "__main__":

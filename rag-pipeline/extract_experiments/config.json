@@ -1,0 +1,21 @@
+{
+  "model": "gpt-5.4-mini-2026-03-17",
+  "reasoning_effort": "low",
+  "pdf_detail": "low",
+  "embedding_model": "text-embedding-3-small",
+  "dimensions": 1536,
+  "budget_usd": 3.0,
+  "context_limit": 400000,
+  "packet_tokens": 12000,
+  "candidate_count": 20,
+  "rrf_constant": 60,
+  "output_tokens": 4096,
+  "results_output_tokens": 24576,
+  "prices_per_million": {
+    "input": 0.75,
+    "cached_input": 0.075,
+    "output": 4.5,
+    "embedding": 0.02
+  },
+  "prices_checked": "2026-10-29"
+}

@@ -30,7 +30,6 @@ REPO = Path(__file__).resolve().parents[3]
 SCOPE_FILE = Path(__file__).resolve().parents[1] / "config" / "gcf_scope.json"
 SCOPE = json.loads(SCOPE_FILE.read_text(encoding="utf-8"))
 BASE = "https://www.greenclimate.fund"
-EXTRA_FIELDS = cpr.EXTRA_FIELDS
 DOCUMENT_TYPES = SCOPE["document_types"]
 
 

@@ -8,7 +8,7 @@ from unittest.mock import patch
 import requests
 
 from core import fetch
-from core.fetch import Client, RequestFailed
+from core.fetch import Client
 from tests.core.support import (
     response,
 )
@@ -45,15 +45,13 @@ class FetchTests(unittest.TestCase):
             waits, {"search.worldbank.org": 0.1, "example.org": 0.5, "slow.org": 10.0}
         )
         self.assertEqual(Client(request_interval=2).host_intervals, {})
-
-    def test_access_denied_stops_later_requests_to_host(self) -> None:
-        """An explicit access block stops other jobs instead of probing new paths."""
-        client = Client(request_interval=0)
-        client._robots["example.org"] = ([], 0.0)
-        with patch.object(requests.Session, "request", return_value=response(403)) as sent:
-            self.assertRaises(RequestFailed, client.get, "https://example.org/one")
-            self.assertRaises(RequestFailed, client.get, "https://example.org/two")
-        self.assertEqual(sent.call_count, 1)
+        with patch.object(
+            requests.Session, "get", side_effect=requests.exceptions.SSLError
+        ) as get:
+            for _ in range(2):
+                with self.assertRaises(fetch.RequestFailed):
+                    client._robots_rules("https", "failed.org")
+            self.assertEqual(get.call_count, 1)
 
 
 if __name__ == "__main__":

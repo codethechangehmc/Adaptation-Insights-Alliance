@@ -15,8 +15,10 @@ SOURCE_MODULES = {
     "ifad": "sources.ifad",
 }
 HELPER_MODULES = {
+    "processing": "helpers.processing",
     "worldbank_projects": "helpers.worldbank_projects",
     "gef_doc_dates": "helpers.gef_doc_dates",
+    "zotero_checkpoint": "helpers.zotero_checkpoint",
 }
 COMMANDS = {**SOURCE_MODULES, **HELPER_MODULES}
 
