@@ -44,22 +44,12 @@ API_COLUMNS = {
     "project_id": "projectid",
     "web_url": "url",
     "report_name": "repnme",
-    "project_name": "projn",
+    "project_title": "projn",
     "abstract": "abstracts",
     "topics": "teratopic",
     "report_no": "repnb",
 }
 API_FIELDS = ",".join(API_COLUMNS.values())
-EXTRA_FIELDS = [
-    "report_name",
-    "project_name",
-    "abstract",
-    "topics",
-    "report_no",
-    "project_sectors",
-    "project_instruments",
-    "project_end_date",
-]
 # Loaded once when planning a run; workers only read this snapshot.
 PROJECT_DETAILS: dict[str, dict] = {}
 POLICY = re.compile(
@@ -231,7 +221,7 @@ def normalize_record(doc: dict) -> dict:
     # Some records have no projectid; the project name often ends with its P-code.
     if not record["project_id"]:
         record["project_id"] = ";".join(
-            dict.fromkeys(PROJECT_CODE.findall(record["project_name"]))
+            dict.fromkeys(PROJECT_CODE.findall(record["project_title"]))
         )
     add_project_details(record, PROJECT_DETAILS)
     return record
@@ -276,7 +266,7 @@ def classify(record: dict) -> tuple[str, str, list[str]]:
     if not is_african(record):
         return "drop", "no_african_country", []
     headline = " ".join(
-        record.get(field, "") for field in ("title", "report_name", "project_name")
+        record.get(field, "") for field in ("title", "report_name", "project_title")
     )
     if POLICY.search(headline) or POLICY.search(record.get("project_instruments", "")):
         return "drop", "policy_or_budget_support", []

@@ -31,7 +31,10 @@ class CommandTests(unittest.TestCase):
                         timeout=30,
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertIn("--output-dir", result.stdout)
+                    directory_option = (
+                        "--data-dir" if name == "zotero_checkpoint" else "--output-dir"
+                    )
+                    self.assertIn(directory_option, result.stdout)
 
 
 if __name__ == "__main__":

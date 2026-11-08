@@ -23,13 +23,6 @@ SIBLING_LIFTABLE_REASONS = {
     "insufficient_metadata",
     "abstract_keywords_only",
 }
-INCLUSION_FIELDS = [
-    "reference_ids",
-    "reference_urls",
-    "reference_date",
-    "rule_status",
-    "rule_reason",
-]
 LIST_FIELDS = ("reference_ids", "reference_urls", "pdf_urls")
 # A listed copy never replaces what the source itself says is unknown.
 SOURCE_OWNED_FIELDS = ("doc_date", "project_end_date", "country", "language")
@@ -89,7 +82,7 @@ def add_inclusions(records: dict, state: dict, paths: list[Path], source: str) -
                 raise ValueError(f"Inclusion list source {row['source']!r} differs from {source}")
             if not row.get("id") or not row.get("title"):
                 raise ValueError("Inclusion rows require non-empty id and title")
-            listed = {**dict.fromkeys(storage.RECORD_FIELDS, ""), **row, "source": source}
+            listed = storage.normalize_record({**row, "source": source})
             listed["reference_ids"] = values(row.get("reference_ids")) or [row["id"]]
             links = [row[field] for field in ("pdf_url", "source_url") if row.get(field)]
             listed["reference_urls"] = list(

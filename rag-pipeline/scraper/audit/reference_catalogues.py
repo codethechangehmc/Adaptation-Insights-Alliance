@@ -22,6 +22,7 @@ R_FILES = {
     "cif": "catalogues/cif/cif_metadata.csv",
     "gcf": "catalogues/gcf/gcf_cpe_metadata.csv",
     "gef": "catalogues/gef/gef_all_documents.csv",
+    "ifad": "catalogues/ifad/ifad_target_documents.csv",
 }
 
 
@@ -120,6 +121,17 @@ def normalize_reference(source: str, row: dict, path: Path) -> dict:
     if source == "worldbank":
         row["project_id"] = ";".join(
             dict.fromkeys(re.findall(r"P\d{6}", row.get("project_id", "")))
+        )
+    if source == "ifad" and row.get("doc_url"):
+        digest = hashlib.sha256(row["doc_url"].encode()).hexdigest()[:16]
+        row.update(
+            id=f"ifad_{row['project_id']}_{digest}",
+            title=row["doc_title"],
+            project_title=row.get("title_catalogue", ""),
+            country=row.get("title_country", ""),
+            pdf_url=row["doc_url"],
+            web_url=row["doc_url"],
+            project_end_date=row.get("end_year", ""),
         )
     if source in {"af", "gcf"}:
         # These snapshots use family approval as doc_date, never a report publication date.

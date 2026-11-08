@@ -29,8 +29,9 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-PARSED_DIR = Path("data/parsed")
-OUT_PATH = Path("data/eval/chunk_check.csv")
+ROOT = Path(__file__).resolve().parent
+PARSED_DIR = ROOT / "parsed" / "parsed"
+OUT_PATH = ROOT / "data" / "eval" / "chunk_check.csv"
 
 STOPWORDS = set("""a an the of in on at to for by with from and or as is are was were be been
 that this these those which who whom its it their there than per into under over not no
@@ -247,7 +248,7 @@ def check_value(row, chunks, label_threshold):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--gold-dir", type=Path, default=Path("data/gold"))
+    ap.add_argument("--gold-dir", type=Path, default=ROOT / "data" / "gold")
     ap.add_argument("--only", nargs="+", metavar="PROJECT_CODE")
     ap.add_argument("--out", type=Path, default=OUT_PATH)
     ap.add_argument("--label-threshold", type=float, default=0.5,

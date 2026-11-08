@@ -1,0 +1,25 @@
+{
+  "documents": [
+    {
+      "id": "P001",
+      "pdf": "../../raw/P001_doc3.pdf",
+      "sections": "../../parsed/parsed/P001_doc3/sections.json",
+      "family": "wb_icr",
+      "focus": ""
+    },
+    {
+      "id": "P009",
+      "pdf": "../../raw/P009_doc3.pdf",
+      "sections": "../../parsed/parsed/P009_doc3/sections.json",
+      "family": "wb_icr",
+      "focus": ""
+    },
+    {
+      "id": "P007",
+      "pdf": "../../raw/P007_doc1.pdf",
+      "sections": "../../parsed/parsed/P007_doc1/sections.json",
+      "family": "agency_evaluation",
+      "focus": ""
+    }
+  ]
+}

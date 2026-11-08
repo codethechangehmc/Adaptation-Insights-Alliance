@@ -1,0 +1,18 @@
+{
+  "stage": "session1_raw",
+  "model": "gpt-5-mini",
+  "prompt_version": "s1-v2.7",
+  "documents": [
+    {
+      "id": "P001",
+      "pdf": "../../raw/P001_doc3.pdf",
+      "groups": {
+        "identity": "local/r/P001/identity.json",
+        "geography": "local/r/P001/geography.json",
+        "rationale": "local/r/P001/rationale.json",
+        "results": "local/r/P001/results.json",
+        "finance": "local/r/P001/finance.json"
+      }
+    }
+  ]
+}

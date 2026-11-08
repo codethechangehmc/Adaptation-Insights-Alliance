@@ -1,10 +1,10 @@
 """
 chunk.py - turn each paper's sections.json into retrieval chunks.
 
-Reads   data/parsed/<paper_id>/sections.json      (from postprocess.py)
-Writes  data/parsed/<paper_id>/chunks.jsonl       one chunk per line
-        data/parsed/<paper_id>/chunks_meta.json   written LAST = done marker
-        data/parsed/<paper_id>/chunks.md          only with --dump-md (for humans)
+Reads   parsed/parsed/<paper_id>/sections.json      (from postprocess.py)
+Writes  parsed/parsed/<paper_id>/chunks.jsonl       one chunk per line
+        parsed/parsed/<paper_id>/chunks_meta.json   written LAST = done marker
+        parsed/parsed/<paper_id>/chunks.md          only with --dump-md (for humans)
 
 Run from rag-pipeline/:
     python chunk.py                        # chunk every parsed paper that needs it
@@ -30,9 +30,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 CHUNKER_VERSION = "0.2"
-PARSED_DIR = Path("data/parsed")
-DEFAULT_DOC_INDEX = Path("data/doc_index.csv")
-ERROR_LOG = Path("data/chunk_errors.log")
+ROOT = Path(__file__).resolve().parent
+PARSED_DIR = ROOT / "parsed" / "parsed"
+DEFAULT_DOC_INDEX = ROOT / "data" / "doc_index.csv"
+ERROR_LOG = ROOT / "data" / "chunk_errors.log"
 
 
 # --------------------------------------------------------------------------
@@ -609,7 +610,7 @@ class PaperChunker:
                 "table": c.get("table"),
                 "suspect_table": c.get("suspect_table", False),
                 "suspect_reasons": c.get("suspect_reasons", []),
-                "image": c.get("image"),     # figures only: PNG path relative to data/parsed/<paper_id>/
+                "image": c.get("image"),     # figures only: PNG path relative to the paper folder
             }
             out.append(rec)
         return out
