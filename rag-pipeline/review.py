@@ -7,7 +7,7 @@ Run from rag-pipeline/:
     python review.py --csv review.csv     # also write a sheet with blank verdict/notes columns to fill in
 
 Where the flags come from: postprocess.py checks each table's cell geometry and writes the suspects to
-data/parsed/<paper>/meta.json under fixes -> suspect_table_list. It also lists headings over 200 characters
+parsed/parsed/<paper>/meta.json under fixes -> suspect_table_list. It also lists headings over 200 characters
 that it turned into plain text (fixes -> demoted_heading_list): usually a list the layout model mistook for a heading. This script only READS those files, so
 it is safe to run any time and needs no Docling.
 
@@ -24,8 +24,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.resolve()
-PARSED = ROOT / "data" / "parsed"
-RAW = ROOT / "data" / "raw"
+PARSED = ROOT / "parsed" / "parsed"
+RAW = ROOT / "raw"
 
 
 def pages_label(pages) -> str:
@@ -51,7 +51,7 @@ def load(only):
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--only", help="only this paper (folder name under data/parsed)")
+    ap.add_argument("--only", help="only this paper (folder name under parsed/parsed)")
     ap.add_argument("--csv", help="also write a review sheet to this path (refuses to overwrite an existing one)")
     ap.add_argument("--force", action="store_true", help="overwrite the --csv file even if it exists")
     args = ap.parse_args()
@@ -63,7 +63,7 @@ def main() -> None:
 
     papers = load(args.only)
     if not papers:
-        print("No meta.json files found under data/parsed. Run parse.py first.")
+        print(f"No meta.json files found under {PARSED}. Run parse.py first.")
         return
 
     sheet, total_flags, total_demoted, stale = [], 0, 0, []
@@ -81,7 +81,7 @@ def main() -> None:
             print(f"{pid}: no flag info (processed before flagging existed). Run: python parse.py --reprocess\n")
             continue
         n = f"{len(flags)} of {n_tables} tables flagged" if n_tables is not None else f"{len(flags)} flagged"
-        print(f"{pid}: {n}   (pdf: data/raw/{pdf})")
+        print(f"{pid}: {n}   (pdf: {RAW / pdf})")
         for f in flags:
             total_flags += 1
             title = f.get("title") or "(no title)"

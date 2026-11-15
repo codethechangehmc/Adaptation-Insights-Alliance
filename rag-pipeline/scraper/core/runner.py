@@ -4,7 +4,6 @@ A source module provides SOURCE, REPO and four functions: plan_searches,
 run_search, classify and pdf_urls. Optional extras:
 
 - SCOPE_FILE: its checksum goes in the summary.
-- EXTRA_FIELDS: catalogue columns after the shared ones.
 - HEADERS: default request headers.
 - add_arguments(parser): the source's own options.
 - prepare_run(args): load lookup tables once, before any record is decided.
@@ -209,7 +208,7 @@ def search_step(
     # Keep what an incomplete search found, for diagnosis only; it is never published.
     if any(result.error for _, result, _ in results):
         partial = classification.merge_records(source.SOURCE, results)
-        storage.write_csv(run_dir / "partial_records.csv", partial.values(), fields_of(source))
+        storage.write_csv(run_dir / "partial_records.csv", partial.values())
     summary["seconds"]["search"] = round(time.monotonic() - started, 1)
     summary.update(searching.search_summary(results))
     return results
@@ -240,7 +239,7 @@ def classify_step(
     storage.save_records(connection, records.values(), summary["started_at"], seen_ids)
     state = storage.load_state(connection)
     decisions = [storage.with_state_fields(records[doc_id], state[doc_id]) for doc_id in records]
-    storage.write_csv(run_dir / "decisions.csv", decisions, fields_of(source))
+    storage.write_csv(run_dir / "decisions.csv", decisions)
     summary["seconds"]["classify"] = round(time.monotonic() - started, 1)
     summary.update(decision_summary(records, state))
     log_decisions(summary)
@@ -279,9 +278,9 @@ def publish_step(
     # The size estimate now includes this run's downloads.
     state = storage.load_state(connection)
     summary.update(decision_summary(records, state))
-    catalogue = storage.catalogue_rows(state)
+    catalogue = storage.catalogue_rows(connection)
     storage.write_csv(
-        args.output_dir / f"{source.SOURCE}_metadata.csv", catalogue, fields_of(source)
+        args.output_dir / f"{source.SOURCE}_metadata.csv", catalogue, storage.RECORD_FIELDS
     )
     summary["catalogue_records"] = len(catalogue)
 
@@ -296,12 +295,6 @@ def is_kept(record: dict) -> bool:
     return record.get("screen_status") != "drop"
 
 
-def fields_of(source: ModuleType) -> list[str]:
-    """Return the catalogue columns: the shared ones, the inclusion ones, then the source's."""
-    extra = list(getattr(source, "EXTRA_FIELDS", []))
-    return storage.RECORD_FIELDS + classification.INCLUSION_FIELDS + extra
-
-
 def new_summary(source: ModuleType, args: argparse.Namespace, run_dir: Path) -> dict:
     """Start the summary with the run's identity, options and scope file checksum."""
     scope_file = Path(getattr(source, "SCOPE_FILE", "") or "")
@@ -310,7 +303,9 @@ def new_summary(source: ModuleType, args: argparse.Namespace, run_dir: Path) -> 
         "source": source.SOURCE,
         "run_id": run_dir.name,
         "status": "running",
-        "mode": "download_only" if args.download_only else "live_search",
+        "mode": "download_only"
+        if args.download_only
+        else ("manual_listing" if getattr(args, "manual_listing", None) else "live_search"),
         "started_at": storage.utc_now(),
         "options": {key: str(value) for key, value in vars(args).items()},
         "scope_file": scope_file.name if is_file else "",

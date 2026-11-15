@@ -33,7 +33,6 @@ BASE = "https://www.afdb.org"
 IDEV = "https://idev.afdb.org"
 IDEV_SEARCH = IDEV + "/en/page/evaluations/search"
 HEADERS = {"Accept-Encoding": "gzip, deflate", "Accept-Language": "en-US,en;q=0.9"}
-EXTRA_FIELDS = ["abstract", "topics", "project_code", "retrieval_channel"]
 IDEV_TYPES = {value.casefold() for value in SCOPE["idev_categories"]}
 PROJECT_CODE = re.compile(r"(?<![A-Z0-9])P-[A-Z0-9]{2}-[A-Z0-9]{3}-\d{3}(?![A-Z0-9])", re.I)
 
@@ -74,9 +73,7 @@ def listing_records(page: BeautifulSoup, url: str, channel: str) -> list[dict]:
     records = []
     container = page.select_one("main") or page
     for link in container.select(".view-content .views-field-title a[href]"):
-        if not re.search(r"/en/documents?/", link["href"]):
-            continue
-
+        # Legacy Gabon PR1 has no /documents/ prefix: PCR page 49 (checked 2026-11-05).
         # IDEV cards are views-row elements; AfDB cards are the column div three levels
         # above the title link (checked 2026-10-15).
         if channel == "idev":
@@ -114,7 +111,6 @@ def card_record(card: Tag, link: Tag, url: str, channel: str, date: str) -> dict
         "country": ",".join(find_countries(title)) or "Africa",
         "language": "",
         "web_url": web_url,
-        "project_code": project_code,
         "project_id": project_code,
         "pdf_url": "",
         "retrieval_channel": channel,
@@ -136,9 +132,11 @@ def last_page(page: BeautifulSoup, current: int) -> int:
 
 
 def enumerate_listing(client: Client, url: str, channel: str, params: dict) -> SearchResult:
-    """Reach the actual last page and reject repeated or unexpectedly empty pages."""
+    """Verify every counted view row or uncounted pager page, then deduplicate URLs."""
     records, seen, index, final, overlaps = [], set(), 0, None, 0
-    while final is None or index <= final:
+    retried = set()
+    raw, total = 0, None
+    while total is None or raw < total:
         # Preserve partial counts if DNS or another request failure interrupts a long sweep.
         try:
             page = client.get_html(url, params={**params, "page": index}, headers=HEADERS)
@@ -161,18 +159,53 @@ def enumerate_listing(client: Client, url: str, channel: str, params: dict) -> S
         final = max(final or 0, reported_last)
         rows = listing_records(page, url, channel)
         ids = [row["id"] for row in rows]
-        if not rows or set(ids).issubset(seen):
+        # The counter counts view rows, not unique URLs, as in R's afdb_parse_counter.
+        # /en/documents/evaluation-reports?page=25 has valid duplicate URLs (2026-11-05).
+        count = re.search(
+            r"Displaying\s+([\d,]+)\s*[-–]\s*([\d,]+)\s+of\s+([\d,]+)",
+            page.get_text(" ", strip=True),
+        )
+        if count:
+            start, end, expected = (int(value.replace(",", "")) for value in count.groups())
+            invalid = (
+                start != raw + 1
+                or end > expected
+                or end - start + 1 != len(rows)
+                or total not in (None, expected)
+            )
+            total = expected if total is None else total
+        else:
+            invalid = channel == "afdb" or set(ids).issubset(seen)
+        if not rows or invalid:
+            if index not in retried:
+                retried.add(index)
+                continue
             return SearchResult(
-                records, pages=index + 1, error=f"Empty or repeated {channel} listing page {index}"
+                records,
+                pages=index + 1,
+                error=f"Invalid or repeated {channel} listing page {index}",
+                notes=(
+                    f"Read {raw} view rows; expected total {total}; "
+                    f"parsed {len(rows)} on this page"
+                ),
             )
         overlaps += len(ids) - len(set(ids) - seen)
         records.extend(row for row in rows if row["id"] not in seen)
         seen.update(ids)
+        raw += len(rows)
         index += 1
+        if raw == total or (total is None and index > final):
+            break
+    if total is not None and raw != total:
+        return SearchResult(records, pages=index, error=f"View row count {raw} != {total}")
     return SearchResult(
         records,
         pages=index,
-        notes=f"Reached pager's final page {final}; {overlaps} overlapping rows",
+        notes=(
+            f"Visited {index} pages; {raw} view rows (reported {total}); "
+            f"{overlaps} overlapping rows; "
+            f"{len(retried)} page retries"
+        ),
     )
 
 
@@ -240,7 +273,7 @@ def classify(record: dict) -> tuple[str, str, list[str]]:
         re.I,
     ):
         return "drop", "non_evaluation_document", []
-    code = record.get("project_code") or record.get("project_id", "")
+    code = record.get("project_id", "")
     if re.fullmatch(r"P-[A-Z0-9]{2}-A[A-Z0-9]{2}-\d{3}", code, re.I):
         return "in_scope", "agriculture_project_code", ["project_code:" + code]
     keywords = find_keywords(title + " " + record.get("abstract", ""))

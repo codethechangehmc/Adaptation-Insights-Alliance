@@ -2,13 +2,13 @@
 parse.py - PDF -> Docling JSON + cleaned markdown + sectioned JSON, one folder per paper.
 
 Run from rag-pipeline/:
-    python parse.py                  # every PDF in data/raw -> data/parsed/<paper_id>/
+    python parse.py                  # every PDF in raw -> parsed/parsed/<paper_id>/
     python parse.py --pages 1-10     # quick test slice, same folders (meta.json records the pages)
     python parse.py --only cif_01    # one paper (file stem)
     python parse.py --force          # redo papers that are already done
     python parse.py --reprocess      # re-run ONLY the cleanup from saved docling.json (seconds, no Docling needed)
 
-Per-paper outputs (data/parsed/<paper_id>/):
+Per-paper outputs (parsed/parsed/<paper_id>/):
     docling.json    native Docling document (pages, bboxes, cell spans) - the source of truth
     raw.md          Docling's markdown, untouched (for before/after comparison)
     clean.md        rendered from docling.json by postprocess.py (spans fixed, footnotes kept, furniture dropped)
@@ -27,7 +27,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).parent.resolve()
-PDF_DIR = ROOT / "data" / "raw"
+PDF_DIR = ROOT / "raw"
 
 import postprocess  # noqa: E402  (sits next to parse.py)
 
@@ -132,7 +132,7 @@ def main() -> None:
     (ROOT / "data").mkdir(exist_ok=True)
     logging.basicConfig(filename=ROOT / "data" / "parse_errors.log", level=logging.ERROR)
 
-    out_root = ROOT / "data" / "parsed"
+    out_root = ROOT / "parsed" / "parsed"
     if args.reprocess:
         reprocess(out_root, args.only)
         return

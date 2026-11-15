@@ -40,7 +40,6 @@ SCOPE = json.loads(SCOPE_FILE.read_text(encoding="utf-8"))
 
 COUNT_API = "https://d-portal.org/q.json"
 ACTIVITY_API = "https://d-portal.org/q.xml"
-EXTRA_FIELDS = ["project_title", "description", "project_end_date", "categories", "sectors"]
 # IFAD files some documents under extra activities as well. The title's project
 # number names the right one: 225 such copies on 2026-10-22, all also listed
 # under their own activity (Paraguay 1100001750 appears under Madagascar 1100001516).
@@ -247,6 +246,19 @@ def document_type(title: str, categories: list[str]) -> str:
     if set(categories) & {"A06", "A07"}:
         return "Progress Report"
     return "Other"
+
+
+def prepare_record(record: dict) -> None:
+    """Apply current link, date and document-family rules to saved records too."""
+    # Older A12 links used relative URLs and Other: /w/projects/1027 (checked 2026-11-05).
+    for field in ("pdf_url", "web_url"):
+        if record.get(field):
+            record[field] = urljoin("https://www.ifad.org", record[field])
+    record["doc_type"] = document_type(
+        record.get("title", ""), record.get("categories", "").split(",")
+    )
+    if not record.get("doc_date"):
+        record["doc_date"] = title_year(record.get("title", ""))
 
 
 def classify(record: dict) -> tuple[str, str, list[str]]:

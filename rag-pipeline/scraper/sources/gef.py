@@ -33,14 +33,6 @@ SCOPE_FILE = Path(__file__).resolve().parents[1] / "config" / "gef_scope.json"
 SCOPE = json.loads(SCOPE_FILE.read_text(encoding="utf-8"))
 SITE = "https://www.thegef.org"
 DATABASE_URL = f"{SITE}/projects-operations/database"
-EXTRA_FIELDS = [
-    "project_title",
-    "project_end_date",
-    "focal_areas",
-    "project_type",
-    "doc_title",
-    "source_doc_type",
-]
 TOTAL = re.compile(r"Displaying\s+[\d,]+\s*[-–]\s*[\d,]+\s+of\s+([\d,]+)")
 LISTING_COLUMNS = {
     "views-field-title": "project_title",
@@ -83,7 +75,7 @@ def prepare_record(record: dict) -> None:
         record.setdefault("source_doc_type", kind)
         normalized = document_type(kind)
         if normalized == "Other":
-            label = record.get("doc_title") or record.get("title", "")
+            label = record.get("title", "")
             path = unquote(urlsplit(record.get("pdf_url", "")).path)
             normalized = document_type(f"{label} {path}")
         record["doc_type"] = normalized
@@ -207,8 +199,7 @@ def project_documents(page: BeautifulSoup, project: dict) -> list[dict]:
                 "source": SOURCE,
                 "id": identifier,
                 "project_id": project["id"],
-                "doc_title": label,
-                "title": f"{project['project_title']}: {label}",
+                "title": label,
                 "pdf_url": url,
                 "language": "",
                 "doc_date": "",

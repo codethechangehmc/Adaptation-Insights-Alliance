@@ -163,7 +163,9 @@ def main(argv: list[str] | None = None) -> int:
         if not path.is_file() or path.suffix == ".part":
             continue
         record = records.get(path.name, {})
-        original = unquote(urlsplit(record.get("pdf_url", "")).path).rsplit("/", 1)[-1]
+        original = unquote(urlsplit(record.get("url") or record.get("pdf_url", "")).path).rsplit(
+            "/", 1
+        )[-1]
         rows.append(inspect_file(path, record.get("id", ""), args.pages, original))
     args.output_dir.mkdir(parents=True, exist_ok=True)
     write_csv(args.output_dir / "gef_doc_dates.csv", rows, FIELDS)

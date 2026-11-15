@@ -24,7 +24,6 @@ SOURCE = "af"
 REPO = Path(__file__).resolve().parents[3]
 SCOPE_FILE = Path(__file__).resolve().parents[1] / "config" / "af_scope.json"
 SCOPE = json.loads(SCOPE_FILE.read_text(encoding="utf-8"))
-EXTRA_FIELDS = cpr.EXTRA_FIELDS
 
 
 def plan_searches(args: Namespace) -> list[dict]:

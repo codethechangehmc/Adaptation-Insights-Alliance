@@ -258,6 +258,9 @@ class Client:
     def _robots_rules(self, scheme: str, host: str) -> tuple[list[tuple[bool, str]], float]:
         """Cache robots rules; stop when a temporary failure prevents reading them."""
         with self._robots_lock:
+            # Reuse failed lookups for queued GEF requests (undpgefpims.org, 2026-11-05).
+            if host in self._blocked:
+                raise self._blocked[host]
             if host in self._robots:
                 return self._robots[host]
 

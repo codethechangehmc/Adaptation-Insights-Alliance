@@ -27,7 +27,6 @@ SCOPE_FILE = Path(__file__).resolve().parents[1] / "config" / "cif_scope.json"
 SCOPE = json.loads(SCOPE_FILE.read_text(encoding="utf-8"))
 BASE = "https://www.cif.org"
 HEADERS = {"X-Requested-With": "XMLHttpRequest", "Referer": BASE + "/knowledge"}
-EXTRA_FIELDS = ["abstract", "topics", "pdf_urls", "retrieval_channel"]
 EVALUATION = re.compile(
     r"evaluat|mid[- ]?term|completion|performance review|learning review|"
     r"lessons learned|impact assessment",

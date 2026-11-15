@@ -22,7 +22,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from run import BATCH_COMMANDS, BATCH_LANES
+from core import storage
+from run import BATCH_COMMANDS, BATCH_LANES, SOURCE_MODULES
 
 REPO = Path(__file__).resolve().parents[2]
 SCRAPER_DIR = Path(__file__).resolve().parent
@@ -114,12 +115,28 @@ def main(argv: list[str] | None = None) -> int:
     with ThreadPoolExecutor(max_workers=len(lanes)) as pool:
         for lane_results in pool.map(lambda lane: run_lane(lane, args, passed_on), lanes):
             results.update(lane_results)
+    export_catalogue(args.output_dir)
 
     # Report in batch order, whatever order the lanes finished in.
     for source in BATCH_COMMANDS:
         if source in results:
             LOG.info("%s", results[source][1])
     return 1 if any(exit_code for exit_code, _ in results.values()) else 0
+
+
+def export_catalogue(output_dir: Path) -> Path:
+    """Combine saved source catalogues into one readable export, preserving source identity."""
+    rows = []
+    for source in SOURCE_MODULES:
+        path = output_dir / source / f"{source}_metadata.csv"
+        if path.is_file():
+            rows.extend(
+                row if "url" in row else storage.human_record(row)
+                for row in storage.read_csv(path)
+            )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    rows.sort(key=lambda row: row.get("doc_date") or "", reverse=True)
+    return storage.write_csv(output_dir / "metadata.csv", rows, storage.RECORD_FIELDS)
 
 
 def parse_arguments(argv: list[str] | None) -> tuple[argparse.Namespace, list[str]]:
