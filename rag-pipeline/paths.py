@@ -14,6 +14,6 @@ PARSED = DATA / "02_parsed"          # step 02 output: one folder per paper
 CHUNKS = DATA / "03_chunks"          # step 03 output: one folder per paper
 EXTRACTED = DATA / "04_extracted"    # step 04 output: one folder per run
 EVAL = DATA / "05_eval"              # checks and scores from every step
-GOLD = DATA / "gold"                 # Lolita's hand-made reference CSVs
+GOLD = ROOT.parent / "catalogues"    # Lolita's hand-made reference CSVs (in git, top of the repo)
 LOGS = DATA / "logs"                 # error logs
 DOC_INDEX = DATA / "doc_index.csv"   # optional: paper titles used by step 03
