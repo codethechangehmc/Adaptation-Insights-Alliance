@@ -9,16 +9,20 @@ For every gold value (e.g. P010, 4612946, "direct project beneficiaries", p.37):
               chunk as the value? If the number and its label are in different
               chunks, retrieval can't hand the model a usable answer.
 
-Run from rag-pipeline/ after parse.py and chunk.py:
-    python check_chunks.py
-    python check_chunks.py --only P010 P001
-    python check_chunks.py --gold-dir path/to/gold_files
+Run from rag-pipeline/ after steps 02 and 03:
+    python -m step03_chunk.check_chunks
+    python -m step03_chunk.check_chunks --only P010 P001
+    python -m step03_chunk.check_chunks --gold-dir path/to/gold_files
+
+From Python (this is what run.py does):
+    from step03_chunk import check_chunks
+    check_chunks.run(only=["P010"])
 
 Inputs (defaults in data/gold/):
     gold_v1_results.csv   project_code, value, metric_stated, page, note, ...
     gold_v1_general.csv   project_code -> document (P010_doc3.pdf -> paper id P010_doc3)
 Output:
-    data/eval/chunk_check.csv   one row per gold value (overwritten each run)
+    data/05_eval/chunk_check.csv   one row per gold value (overwritten each run)
     a summary printed per project and overall
 """
 
@@ -29,9 +33,9 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-PARSED_DIR = ROOT / "parsed" / "parsed"
-OUT_PATH = ROOT / "data" / "eval" / "chunk_check.csv"
+from paths import CHUNKS, EVAL, GOLD
+
+OUT_PATH = EVAL / "chunk_check.csv"
 
 STOPWORDS = set("""a an the of in on at to for by with from and or as is are was were be been
 that this these those which who whom its it their there than per into under over not no
@@ -144,7 +148,7 @@ def project_to_paper(general_rows):
 
 
 def load_chunks(paper_id):
-    path = PARSED_DIR / paper_id / "chunks.jsonl"
+    path = CHUNKS / paper_id / "chunks.jsonl"
     if not path.exists():
         return None
     chunks = []
@@ -246,17 +250,10 @@ def check_value(row, chunks, label_threshold):
 # Main
 # --------------------------------------------------------------------------
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--gold-dir", type=Path, default=ROOT / "data" / "gold")
-    ap.add_argument("--only", nargs="+", metavar="PROJECT_CODE")
-    ap.add_argument("--out", type=Path, default=OUT_PATH)
-    ap.add_argument("--label-threshold", type=float, default=0.5,
-                    help="share of label words that must be in the value's chunk")
-    args = ap.parse_args()
-
-    results_path = args.gold_dir / "gold_v1_results.csv"
-    general_path = args.gold_dir / "gold_v1_general.csv"
+def run(only=None, gold_dir=GOLD, out=OUT_PATH, label_threshold=0.5):
+    """Check that gold values are findable in the chunks. only = list of project codes (None = all)."""
+    results_path = gold_dir / "gold_v1_results.csv"
+    general_path = gold_dir / "gold_v1_general.csv"
     for p in (results_path, general_path):
         if not p.exists():
             print(f"Missing {p}. Put the gold CSVs there or pass --gold-dir.")
@@ -264,8 +261,8 @@ def main():
 
     gold = load_csv(results_path)
     paper_of = project_to_paper(load_csv(general_path))
-    if args.only:
-        gold = [r for r in gold if r["project_code"] in set(args.only)]
+    if only:
+        gold = [r for r in gold if r["project_code"] in set(only)]
 
     chunk_cache, out_rows = {}, []
     for r in gold:
@@ -277,7 +274,7 @@ def main():
         if chunks is None:
             res = {"status": "no_chunks"}
         else:
-            res = check_value(r, chunks, args.label_threshold)
+            res = check_value(r, chunks, label_threshold)
         out_rows.append({
             "project_code": code, "paper_id": pid,
             "value": r.get("value", ""), "metric_stated": r.get("metric_stated", ""),
@@ -287,8 +284,8 @@ def main():
     cols = ["project_code", "paper_id", "value", "metric_stated", "gold_page", "status",
             "match_kind", "n_chunks_with_value", "best_chunk", "best_chunk_pages",
             "best_chunk_type", "label_score", "label_together", "snippet", "gold_note"]
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.out, "w", newline="", encoding="utf-8") as f:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
         w.writeheader()
         w.writerows(out_rows)
@@ -316,7 +313,18 @@ def main():
     for code in sorted(by_proj):
         print(f"{code:6} {by_proj[code][0]['paper_id'] or '(no paper id)':14} {line(by_proj[code])}")
     print(f"\nOVERALL               {line(out_rows)}")
-    print(f"Details: {args.out}  (sort by status; misses are the to-do list)")
+    print(f"Details: {out}  (sort by status; misses are the to-do list)")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--gold-dir", type=Path, default=GOLD)
+    ap.add_argument("--only", nargs="+", metavar="PROJECT_CODE")
+    ap.add_argument("--out", type=Path, default=OUT_PATH)
+    ap.add_argument("--label-threshold", type=float, default=0.5,
+                    help="share of label words that must be in the value's chunk")
+    args = ap.parse_args()
+    run(only=args.only, gold_dir=args.gold_dir, out=args.out, label_threshold=args.label_threshold)
 
 
 if __name__ == "__main__":

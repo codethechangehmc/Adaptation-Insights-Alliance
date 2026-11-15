@@ -2,13 +2,17 @@
 parse.py - PDF -> Docling JSON + cleaned markdown + sectioned JSON, one folder per paper.
 
 Run from rag-pipeline/:
-    python parse.py                  # every PDF in raw -> parsed/parsed/<paper_id>/
-    python parse.py --pages 1-10     # quick test slice, same folders (meta.json records the pages)
-    python parse.py --only cif_01    # one paper (file stem)
-    python parse.py --force          # redo papers that are already done
-    python parse.py --reprocess      # re-run ONLY the cleanup from saved docling.json (seconds, no Docling needed)
+    python -m step02_parse.parse                # every PDF in data/01_raw -> data/02_parsed/<paper_id>/
+    python -m step02_parse.parse --pages 1-10   # quick test slice, same folders (meta.json records the pages)
+    python -m step02_parse.parse --only cif_01  # one or more papers (file stems)
+    python -m step02_parse.parse --force        # redo papers that are already done
+    python -m step02_parse.parse --reprocess    # re-run ONLY the cleanup from saved docling.json (seconds, no Docling needed)
 
-Per-paper outputs (parsed/parsed/<paper_id>/):
+From Python (this is what run.py does):
+    from step02_parse import parse
+    parse.run(only=["cif_01"], reprocess=True)
+
+Per-paper outputs (data/02_parsed/<paper_id>/):
     docling.json    native Docling document (pages, bboxes, cell spans) - the source of truth
     raw.md          Docling's markdown, untouched (for before/after comparison)
     clean.md        rendered from docling.json by postprocess.py (spans fixed, footnotes kept, furniture dropped)
@@ -26,10 +30,8 @@ import logging
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).parent.resolve()
-PDF_DIR = ROOT / "raw"
-
-import postprocess  # noqa: E402  (sits next to parse.py)
+from paths import LOGS, PARSED, RAW
+from step02_parse import postprocess
 
 
 # --------------------------------------------------------------------------
@@ -67,13 +69,13 @@ def render_outputs(out: Path, pdf_path: Path | None = None) -> tuple[list, dict]
     return sections, dict(stats)
 
 
-def reprocess(out_root: Path, only: str | None) -> None:
+def reprocess_saved(out_root: Path, only: str | None) -> None:
     for d in sorted(p for p in out_root.iterdir() if (p / "docling.json").exists()):
-        if only and d.name != only:
+        if only and d.name not in only:
             continue
         meta_path = d / "meta.json"
         meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
-        pdf = PDF_DIR / meta.get("source_file", d.name + ".pdf")
+        pdf = RAW / meta.get("source_file", d.name + ".pdf")
         sections, stats = render_outputs(d, pdf if pdf.exists() else None)
         meta.update({"n_sections": len(sections), "fixes": stats})
         meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
@@ -121,36 +123,40 @@ def parse_pages(s: str) -> tuple[int, int]:
     return int(a), int(b)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pages", type=parse_pages, help="page range like 1-10 for quick tests (same output folders; a later full run re-parses)")
-    ap.add_argument("--only", help="only parse the PDF with this file stem")
-    ap.add_argument("--reprocess", action="store_true", help="skip Docling; re-render clean.md/sections.json from saved docling.json")
-    ap.add_argument("--force", action="store_true", help="re-parse even if already done")
-    args = ap.parse_args()
+def run(only=None, pages=None, force=False, reprocess=False):
+    """Parse PDFs from data/01_raw. only = list of file stems (None = all); pages = (first, last) for a test slice."""
+    LOGS.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(filename=LOGS / "parse_errors.log", level=logging.ERROR)
 
-    (ROOT / "data").mkdir(exist_ok=True)
-    logging.basicConfig(filename=ROOT / "data" / "parse_errors.log", level=logging.ERROR)
-
-    out_root = ROOT / "parsed" / "parsed"
-    if args.reprocess:
-        reprocess(out_root, args.only)
+    out_root = PARSED
+    if reprocess:
+        reprocess_saved(out_root, only)
         return
-    pdfs = sorted(p for p in PDF_DIR.iterdir() if p.suffix.lower() == ".pdf")
-    if args.only:
-        pdfs = [p for p in pdfs if p.stem == args.only]
+    pdfs = sorted(p for p in RAW.iterdir() if p.suffix.lower() == ".pdf")
+    if only:
+        pdfs = [p for p in pdfs if p.stem in only]
 
     counts = {"done": 0, "skipped": 0, "failed": 0}
     for pdf in pdfs:
         try:
-            result = process_pdf(pdf, out_root, args.pages, args.force)
+            result = process_pdf(pdf, out_root, pages, force)
             counts[result] += 1
             print(f"{result}: {pdf.name}")
         except Exception:
             counts["failed"] += 1
             logging.exception(pdf.name)
-            print(f"FAILED: {pdf.name} (see data/parse_errors.log)")
+            print(f"FAILED: {pdf.name} (see data/logs/parse_errors.log)")
     print(f"=== {len(pdfs)} PDFs: {counts} ===")
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Step 02: parse PDFs with Docling.")
+    ap.add_argument("--pages", type=parse_pages, help="page range like 1-10 for quick tests (same output folders; a later full run re-parses)")
+    ap.add_argument("--only", nargs="+", metavar="PAPER_ID", help="only parse these PDFs (file stems)")
+    ap.add_argument("--reprocess", action="store_true", help="skip Docling; re-render clean.md/sections.json from saved docling.json")
+    ap.add_argument("--force", action="store_true", help="re-parse even if already done")
+    args = ap.parse_args()
+    run(only=args.only, pages=args.pages, force=args.force, reprocess=args.reprocess)
 
 
 if __name__ == "__main__":

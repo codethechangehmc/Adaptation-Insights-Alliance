@@ -2,12 +2,12 @@
 review.py - list every table the parser flagged as possibly mis-parsed, across all papers.
 
 Run from rag-pipeline/:
-    python review.py                      # print the flagged tables, grouped by paper
-    python review.py --only af_01         # one paper
-    python review.py --csv review.csv     # also write a sheet with blank verdict/notes columns to fill in
+    python -m step02_parse.review                     # print the flagged tables, grouped by paper
+    python -m step02_parse.review --only af_01        # one or more papers
+    python -m step02_parse.review --csv review.csv    # also write a sheet with blank verdict/notes columns to fill in
 
 Where the flags come from: postprocess.py checks each table's cell geometry and writes the suspects to
-parsed/parsed/<paper>/meta.json under fixes -> suspect_table_list. It also lists headings over 200 characters
+data/02_parsed/<paper>/meta.json under fixes -> suspect_table_list. It also lists headings over 200 characters
 that it turned into plain text (fixes -> demoted_heading_list): usually a list the layout model mistook for a heading. This script only READS those files, so
 it is safe to run any time and needs no Docling.
 
@@ -23,9 +23,7 @@ import json
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).parent.resolve()
-PARSED = ROOT / "parsed" / "parsed"
-RAW = ROOT / "raw"
+from paths import PARSED, RAW
 
 
 def pages_label(pages) -> str:
@@ -39,7 +37,7 @@ def load(only):
     for meta_path in sorted(PARSED.glob("*/meta.json")):
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         pid = meta.get("paper_id", meta_path.parent.name)
-        if only and pid != only:
+        if only and pid not in only:
             continue
         fixes = meta.get("fixes", {})
         # postprocess.py always writes suspect_tables (0 if none). Missing key = older version of the cleanup.
@@ -49,21 +47,16 @@ def load(only):
     return papers
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--only", help="only this paper (folder name under parsed/parsed)")
-    ap.add_argument("--csv", help="also write a review sheet to this path (refuses to overwrite an existing one)")
-    ap.add_argument("--force", action="store_true", help="overwrite the --csv file even if it exists")
-    args = ap.parse_args()
-
+def run(only=None, csv_path=None, force=False):
+    """Print flagged tables. only = list of paper ids (None = all); csv_path = also write a review sheet there."""
     try:                                   # Windows consoles choke on some characters in table text
         sys.stdout.reconfigure(errors="replace")
     except Exception:
         pass
 
-    papers = load(args.only)
+    papers = load(only)
     if not papers:
-        print(f"No meta.json files found under {PARSED}. Run parse.py first.")
+        print(f"No meta.json files found under {PARSED}. Run step 02 (parse) first.")
         return
 
     sheet, total_flags, total_demoted, stale = [], 0, 0, []
@@ -78,7 +71,7 @@ def main() -> None:
             sheet.append([pid, pdf, d["page"], d["page"], "(long heading)", f"{what}: {d['preview']}", "", ""])
         if flags is None:
             stale.append(pid)
-            print(f"{pid}: no flag info (processed before flagging existed). Run: python parse.py --reprocess\n")
+            print(f"{pid}: no flag info (processed before flagging existed). Run: python -m step02_parse.parse --reprocess\n")
             continue
         n = f"{len(flags)} of {n_tables} tables flagged" if n_tables is not None else f"{len(flags)} flagged"
         print(f"{pid}: {n}   (pdf: {RAW / pdf})")
@@ -94,9 +87,9 @@ def main() -> None:
     print(f"=== {len(papers)} papers, {total_flags} flagged tables, {total_demoted} long headings handled"
           + (f", {len(stale)} need --reprocess" if stale else "") + " ===")
 
-    if args.csv:
-        out = Path(args.csv)
-        if out.exists() and not args.force:
+    if csv_path:
+        out = Path(csv_path)
+        if out.exists() and not force:
             print(f"\nNot writing {out}: it already exists and may hold verdicts someone typed. "
                   f"Use another name, or --force to overwrite.")
             return
@@ -106,6 +99,15 @@ def main() -> None:
                         "verdict (real / false alarm)", "notes"])
             w.writerows(sheet)
         print(f"\nWrote {out} with {len(sheet)} rows.")
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Step 02 check: list tables the parser flagged.")
+    ap.add_argument("--only", nargs="+", metavar="PAPER_ID", help="only these papers (folder names under data/02_parsed)")
+    ap.add_argument("--csv", help="also write a review sheet to this path (refuses to overwrite an existing one)")
+    ap.add_argument("--force", action="store_true", help="overwrite the --csv file even if it exists")
+    args = ap.parse_args()
+    run(only=args.only, csv_path=args.csv, force=args.force)
 
 
 if __name__ == "__main__":
