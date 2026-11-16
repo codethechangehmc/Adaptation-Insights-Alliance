@@ -3,7 +3,7 @@
 import re
 from decimal import Decimal, InvalidOperation
 
-from common.files import norm
+from step04_extract.files import norm
 
 
 def number(value: str) -> Decimal | None:

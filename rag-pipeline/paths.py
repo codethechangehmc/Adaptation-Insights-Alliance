@@ -15,5 +15,7 @@ CHUNKS = DATA / "03_chunks"          # step 03 output: one folder per paper
 EXTRACTED = DATA / "04_extracted"    # step 04 output: one folder per run
 EVAL = DATA / "05_eval"              # checks and scores from every step
 GOLD = ROOT.parent / "catalogues"    # Lolita's hand-made reference CSVs (in git, top of the repo)
+REFERENCE = ROOT.parent / "test_set"   # Lolita's test set: gold + holdout answers; seeds the step 05 labels
+LABELS = ROOT / "step05_evaluate" / "labels" / "review.json"   # the human-checked answer key (in git)
 LOGS = DATA / "logs"                 # error logs
 DOC_INDEX = DATA / "doc_index.csv"   # optional: paper titles used by step 03

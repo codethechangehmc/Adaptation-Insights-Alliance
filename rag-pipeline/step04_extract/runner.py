@@ -7,12 +7,12 @@ from pathlib import Path
 
 import jsonschema
 
-from common.api import BudgetError, Client
-from common.files import ROOT, file_hash, fingerprint, read_json, tokens, write_json
-from common.inputs import full_text, prepare_document
-from common.rules import fact_flags, headline
-from common.tasks import FIELDS, SYSTEM, VERSION, response_schema, task_text
-from hybrid.retrieval import retrieve
+from step04_extract.api import BudgetError, Client
+from step04_extract.files import CONFIG, HERE, file_hash, fingerprint, read_json, tokens, write_json
+from step04_extract.inputs import full_text, prepare_document
+from step04_extract.rules import fact_flags, headline
+from step04_extract.tasks import FIELDS, SYSTEM, VERSION, response_schema, task_text
+from step04_extract.retrieval import retrieve
 
 
 def jobs(documents: list[dict], methods: list[str], groups: list[str], repeats: int) -> list[dict]:
@@ -124,13 +124,9 @@ def start_run(
     output: Path, planned: list[dict], prepared: dict, config: dict, resume: bool
 ) -> dict:
     """Freeze input/config/code hashes so a resume cannot silently mix different experiments."""
-    code = {
-        str(p.relative_to(ROOT)): file_hash(p)
-        for p in ROOT.rglob("*.py")
-        if not {"tests", "results", "cache"}.intersection(p.relative_to(ROOT).parts)
-    }
+    code = {p.name: file_hash(p) for p in sorted(HERE.glob("*.py"))}
     template_hashes = {
-        name: file_hash(ROOT / "inputs" / name)
+        name: file_hash(CONFIG / name)
         for name in ("results_schema.json", "results_template.xlsx")
     }
     signature = fingerprint(

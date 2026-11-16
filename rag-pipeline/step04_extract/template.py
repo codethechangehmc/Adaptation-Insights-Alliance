@@ -4,12 +4,12 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from common.files import ROOT, contains, fingerprint, norm, read_json, write_csv, write_json
-from common.rules import content_flags, number
-from common.tasks import GROUPS
-from evaluation.evidence import check_quote, pdf_pages, quote_pages
+from step04_extract.files import CONFIG, contains, fingerprint, norm, read_json, write_csv, write_json
+from step04_extract.rules import content_flags, number
+from step04_extract.tasks import GROUPS
+from step04_extract.evidence import check_quote, pdf_pages, quote_pages
 
-SCHEMA = read_json(ROOT / "inputs/results_schema.json")
+SCHEMA = read_json(CONFIG / "results_schema.json")
 RESULT_COLUMNS = SCHEMA["columns"] + [
     "method",
     "trial",
@@ -183,7 +183,7 @@ def provenance(
         "page": primary,
         "also_pages": ",".join(map(str, repeats)),
         "quote": " ... ".join(dict.fromkeys(e["quote"] for e in fact["evidence"] if e["quote"])),
-        "chunk_id": f"{Path(document['pdf']).stem}:{block['id']}"
+        "chunk_id": block["id"]
         if block and job["method"] == "hybrid"
         else "",
         "source_block_id": block.get("block_id", block.get("id", "")),

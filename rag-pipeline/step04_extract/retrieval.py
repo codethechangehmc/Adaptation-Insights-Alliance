@@ -7,8 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
-from common.files import fingerprint, read_json, tokens, write_json
-from common.inputs import render_block
+from step04_extract.files import fingerprint, read_json, tokens, write_json
+from step04_extract.inputs import render_block
 
 QUERIES = {
     "identity": [

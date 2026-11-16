@@ -1,32 +1,37 @@
-"""Normalize prepared JSON here so the experiment does not depend on a parser."""
+"""Read each report's inputs: the PDF, step 02's sections.json and step 03's chunks.jsonl."""
 
+import json
 import re
 from collections import Counter
 from pathlib import Path
 
-from common.files import file_hash, fingerprint, read_json, tokenizer, tokens
+from paths import CHUNKS, PARSED, RAW
+from step04_extract.files import MANIFEST, file_hash, fingerprint, read_json, tokens
 
 
-def load_manifest(path: Path, selected: list[str] | None = None) -> list[dict]:
-    """Resolve document paths relative to the manifest, never the current directory."""
+def load_manifest(path: Path = MANIFEST, selected: list[str] | None = None) -> list[dict]:
+    """List the reports to extract, with their files found through paths.py.
+
+    selected: project codes (P001) or paper ids (P001_doc3); None means every report.
+    """
     documents = read_json(path)["documents"]
     ids = [d["id"] for d in documents]
     if len(ids) != len(set(ids)) or any(not re.fullmatch(r"[\w-]+", i) for i in ids):
         raise ValueError("Document IDs must be unique safe names.")
-    if selected and set(selected) - set(ids):
-        raise ValueError(f"Unknown document IDs: {sorted(set(selected) - set(ids))}")
+    known = set(ids) | {d["paper"] for d in documents}
+    if selected and set(selected) - known:
+        raise ValueError(f"Not in the manifest: {sorted(set(selected) - known)}")
     resolved = []
     for item in documents:
-        if selected and item["id"] not in selected:
+        if selected and item["id"] not in selected and item["paper"] not in selected:
             continue
-        if item.get("chunks"):
-            raise ValueError(
-                "Remove the chunks path: hybrid chunks are derived from sections.json."
-            )
-        doc = dict(item)
-        for key in ("pdf", "sections"):
-            doc[key] = (path.parent / item[key]).resolve() if item.get(key) else None
-        resolved.append(doc)
+        paper = item["paper"]
+        resolved.append({
+            **item,
+            "pdf": RAW / f"{paper}.pdf",
+            "sections": PARSED / paper / "sections.json",
+            "chunks": CHUNKS / paper / "chunks.jsonl",
+        })
     return resolved
 
 
@@ -147,87 +152,27 @@ def full_text(document: dict) -> str:
     return "\n\n".join(render_block(block) for block in document["blocks"])
 
 
-def split_table(text: str, limit: int) -> list[str]:
-    """Split a long table only between rows, repeating its header."""
-    lines = text.splitlines()
-    separator = next(
-        (i for i, line in enumerate(lines) if re.fullmatch(r"[| :\-]+", line) and "-" in line),
-        None,
-    )
-    if separator is None:
-        if tokens(text) > 8191:
-            raise ValueError(
-                "Oversized table without a recognizable header; repair the sections table."
-            )
-        return [text]
-    header = lines[: separator + 1]
-    parts, current = [], list(header)
-    for line in lines[separator + 1 :]:
-        if len(current) > len(header) and tokens("\n".join(current + [line])) > limit:
-            parts.append("\n".join(current))
-            current = list(header)
-        current.append(line)
-    if len(current) > len(header):
-        parts.append("\n".join(current))
-    return parts or [text]
-
-
-def token_pieces(text: str, limit: int = 600) -> list[str]:
-    """Split only at valid UTF-8 boundaries, including when a character spans tokens."""
-    enc = tokenizer()
-    ids = enc.encode(text, disallowed_special=())
-    pieces = []
-    while ids:
-        end = min(limit, len(ids))
-        raw = b"".join(enc.decode_single_token_bytes(i) for i in ids[:end])
-        while True:
-            try:
-                piece = raw.decode("utf-8")
-                break
-            except UnicodeDecodeError:
-                end -= 1
-                if not end:
-                    raise ValueError(
-                        "Token limit cannot hold a complete UTF-8 character."
-                    ) from None
-                raw = b"".join(enc.decode_single_token_bytes(i) for i in ids[:end])
-        pieces.append(piece)
-        ids = ids[end:]
-    return pieces
-
-
-def split_text(text: str) -> list[str]:
-    """Group paragraphs near 450 tokens and split oversized paragraphs at 600."""
-    parts, current = [], ""
-    for paragraph in re.split(r"\n\s*\n", text):
-        pieces = token_pieces(paragraph)
-        for piece in pieces:
-            if current and tokens(current + "\n\n" + piece) > 600:
-                parts.append(current)
-                current = ""
-            current = (current + "\n\n" + piece).strip()
-            if tokens(current) >= 450:
-                parts.append(current)
-                current = ""
-    return parts + ([current] if current else [])
-
-
-def make_chunks(blocks: list[dict]) -> list[dict]:
-    """Create retrieval passages without dropping any table, annex or paragraph."""
+def load_chunks(path: Path) -> list[dict]:
+    """Read step 03's chunks and rename the fields to what search, export and scoring use."""
     chunks = []
-    for block in blocks:
-        # Empty tables and figures stay in the provenance, not the embedding input.
-        if not block["text"].strip():
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
             continue
-        parts = (
-            split_table(block["text"], 1500)
-            if block["type"] == "table"
-            else split_text(block["text"])
-        )
-        for text in parts:
-            chunk = {**block, "id": f"c{len(chunks):04d}", "block_id": block["id"], "text": text}
-            chunk["search_text"] = block["heading"] + "\n" + text
-            chunks.append(chunk)
+        c = json.loads(line)
+        heading = " > ".join(c.get("heading_path") or [])
+        chunks.append({
+            "id": c["chunk_id"],
+            "text": c["text"],
+            "pages": list(c["pages"]),
+            "type": c["type"],
+            "heading": heading,
+            "section_id": heading,                 # neighbours = chunks under the same heading
+            "section_kind": c.get("section_kind", "body"),
+            "search_text": c["embed_text"],        # text with title/section/page prefix
+            "suspect": c.get("suspect_reasons", []),
+        })
+    if not chunks:
+        raise ValueError(f"No chunks in {path}")
     return chunks
 
 
@@ -269,9 +214,9 @@ def prepare_document(document: dict) -> dict:
     """Read existing artifacts and reject missing or explicitly partial inputs."""
     import pymupdf
 
-    for key in ("pdf", "sections"):
+    for key in ("pdf", "sections", "chunks"):
         if not document.get(key) or not document[key].is_file():
-            raise ValueError(f"missing {key}: {document.get(key)}")
+            raise ValueError(f"missing {key}: {document.get(key)} (run steps 02 and 03 first)")
     if document["pdf"].stat().st_size >= 50_000_000:
         raise ValueError("PDF exceeds the API file size limit.")
     with pymupdf.open(document["pdf"]) as pdf:
@@ -287,12 +232,12 @@ def prepare_document(document: dict) -> dict:
     raw = read_json(document["sections"])
     sections = raw["sections"] if isinstance(raw, dict) else raw
     blocks = normalize_blocks(sections, page_count)
-    chunks = make_chunks(blocks)
+    chunks = load_chunks(document["chunks"])
     if any(tokens(c["search_text"]) > 8191 for c in chunks):
         raise ValueError(
-            "A generated chunk exceeds the embedding limit; split the sections block."
+            "A chunk exceeds the embedding limit; lower --max-table-tokens in step 03."
         )
-    hashes = {k: file_hash(document[k]) for k in ("pdf", "sections")}
+    hashes = {k: file_hash(document[k]) for k in ("pdf", "sections", "chunks")}
     if meta.exists():
         hashes["meta"] = file_hash(meta)
     diagnostics = input_diagnostics(blocks, metadata, page_count)
@@ -302,6 +247,7 @@ def prepare_document(document: dict) -> dict:
         **settings,
         "pdf": str(document["pdf"]),
         "sections": str(document["sections"]),
+        "chunks_file": str(document["chunks"]),
         "page_count": page_count,
         "blocks": blocks,
         "chunks": chunks,

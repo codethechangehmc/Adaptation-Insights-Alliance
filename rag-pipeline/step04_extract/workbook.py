@@ -12,8 +12,8 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.worksheet import Worksheet
 
-from common.files import ROOT, file_hash, read_json, write_json
-from common.template import PROJECT_COLUMNS, RESULT_COLUMNS, SCHEMA
+from step04_extract.files import CONFIG, file_hash, read_json, write_json
+from step04_extract.template import PROJECT_COLUMNS, RESULT_COLUMNS, SCHEMA
 
 
 def set_value(cell: Cell, value: object) -> None:
@@ -153,7 +153,7 @@ def export_xlsx(run_dir: Path) -> Path:
         read_json(output / "template_results.json"),
         read_json(output / "projects.json"),
     )
-    book = load_workbook(ROOT / "inputs/results_template.xlsx")
+    book = load_workbook(CONFIG / "results_template.xlsx")
     result_sheet(book["results"], rows)
     project_sheet(book, projects)
     spec = book["columns"]
@@ -194,7 +194,7 @@ def export_xlsx(run_dir: Path) -> Path:
         {
             "writer": "openpyxl",
             "exporter_sha256": file_hash(Path(__file__)),
-            "template_sha256": file_hash(ROOT / "inputs/results_template.xlsx"),
+            "template_sha256": file_hash(CONFIG / "results_template.xlsx"),
             "data_hashes": {
                 name: file_hash(output / name)
                 for name in ("template_results.json", "projects.json")

@@ -5,9 +5,9 @@ import os
 from pathlib import Path
 from urllib.parse import quote
 
-from common.exports import export_run
-from common.files import fingerprint, read_json, write_json
-from evaluation.evidence import prediction_id
+from step04_extract.exports import export_run
+from step04_extract.files import fingerprint, read_json, write_json
+from step04_extract.evidence import prediction_id
 
 STYLE = """body{font:15px system-ui;margin:2rem;color:#182337;background:#f7f8fa}
 table{border-collapse:collapse;width:100%;table-layout:fixed;background:white;margin-bottom:2rem}
@@ -63,11 +63,11 @@ def cell(job: dict | None, run_dir: Path, output: Path, review_map: dict) -> str
     return "\n<hr>\n".join(parts)
 
 
-def report(run_dir: Path) -> list[Path]:
-    """Write analysis and blinded review pages for all scheduled jobs."""
+def report(run_dir: Path, out_dir: Path) -> list[Path]:
+    """Write the comparison page and the blind review page for every job (into out_dir/reports)."""
     run = read_json(run_dir / "run.json")
     export_run(run_dir)
-    directory = run_dir / "reports"
+    directory = out_dir / "reports"
     directory.mkdir(parents=True, exist_ok=True)
     methods = sorted(
         {job["method"] for job in run["jobs"]}, key=lambda method: fingerprint([run["id"], method])

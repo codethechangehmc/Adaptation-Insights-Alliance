@@ -3,8 +3,9 @@
 import csv
 from pathlib import Path
 
-from common.files import ROOT, write_json
-from common.tasks import FIELDS
+from paths import REFERENCE
+from step04_extract.files import write_json
+from step04_extract.tasks import FIELDS
 
 REFERENCE_FIELDS = {
     "project_title": "project_title",
@@ -54,7 +55,7 @@ def seed(path: Path, documents: list[dict], references: Path | None = None) -> N
     """Seed a review file once, refusing to overwrite human work."""
     if path.exists():
         raise ValueError(f"Review file already exists; edit it in place: {path}")
-    references = references or ROOT.parents[1] / "test_set"
+    references = references or REFERENCE
     general = csv_rows(references / "reference_general.csv")
     results = csv_rows(references / "reference_gold_results.csv")
     labels = []

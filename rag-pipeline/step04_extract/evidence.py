@@ -4,7 +4,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-from common.files import contains, fingerprint, norm
+from step04_extract.files import contains, fingerprint, norm
 
 
 def prediction_id(job: dict, fact: dict, index: int) -> str:

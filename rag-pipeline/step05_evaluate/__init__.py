@@ -1,1 +1,1 @@
-"""Offline evidence evaluation and comparison reports."""
+"""Step 05: compare the extraction methods and score them against checked answers."""

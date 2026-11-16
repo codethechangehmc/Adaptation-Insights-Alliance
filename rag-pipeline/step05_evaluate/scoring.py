@@ -3,10 +3,10 @@
 from collections import defaultdict
 from pathlib import Path
 
-from common.api import usage_cost
-from common.files import contains, file_hash, fingerprint, norm, read_json, write_csv, write_json
-from common.rules import content_flags, fact_flags, number, scoring_fact
-from evaluation.evidence import check_quote, evidence_covered, pdf_pages, prediction_id
+from step04_extract.api import usage_cost
+from step04_extract.files import contains, file_hash, fingerprint, norm, read_json, write_csv, write_json
+from step04_extract.rules import content_flags, fact_flags, number, scoring_fact
+from step04_extract.evidence import check_quote, evidence_covered, pdf_pages, prediction_id
 
 
 def equivalent(got: str, accepted: list[str]) -> bool:
@@ -261,7 +261,7 @@ def complete_set(job: dict, field: str, benchmark: dict) -> bool:
     )
 
 
-def evaluate(run_dir: Path, benchmark_path: Path) -> dict:
+def evaluate(run_dir: Path, benchmark_path: Path, out_dir: Path) -> dict:
     """Write detailed and aggregate scores without making API calls."""
     benchmark = read_json(benchmark_path)
     labels = benchmark["labels"]
@@ -297,7 +297,7 @@ def evaluate(run_dir: Path, benchmark_path: Path) -> dict:
             }
         )
     summary = summarize(rows)
-    output = run_dir / "evaluation"
+    output = out_dir / "scores"
     columns = [
         "job",
         "document",

@@ -3,9 +3,9 @@
 from collections import defaultdict
 from pathlib import Path
 
-from common.files import read_json, write_csv, write_json
-from common.rules import headline
-from common.tasks import GROUPS, RESULT_CONTEXT_FIELDS
+from step04_extract.files import read_json, write_csv, write_json
+from step04_extract.rules import headline
+from step04_extract.tasks import GROUPS, RESULT_CONTEXT_FIELDS
 
 ARRAY_FIELDS = {"countries", "funder_names", "implementor_names"}
 PAGE_NAMES = {
@@ -146,7 +146,7 @@ def export_run(run_dir: Path) -> dict:
         write_csv(output / f"{name}.csv", rows, columns or ["stage"])
         write_json(output / f"{name}.json", rows)
     # Template exports are a separate presentation layer over the unchanged raw tables.
-    from common.template import export_template
+    from step04_extract.template import export_template
 
     export_template(run_dir, list(wide.values()))
     write_json(
