@@ -13,11 +13,21 @@ Compares the methods of one step 04 run and, once the answer key is checked, sco
 python -m step05_evaluate.evaluate --run-id pilot03     # comparison pages, plus scores if the key exists
 python -m step05_evaluate.evaluate --init-review        # create the answer key from Lolita's test set (once)
 python -m step05_evaluate.compare --run-id pilot03      # optional: this run vs the Alliance's R pipeline and the gold answers
+python -m step05_evaluate.dashboard --run-id pilot03    # optional, after compare: one HTML page to share (needs a hand check, below)
 ```
 
 `compare` writes `data/05_eval/<run-id>/compare/` (summary.json, by_report.csv, gold_matches.csv): rows
 delivered, gold values found (same lenient number-match rule for R and for us), verified rate, page right
-first time, rows needing review, and cost per method. It needs no answer-key review.
+first time, rows needing review, and cost per method. It needs no answer-key review. R's output counts
+all three places it writes results: result1-3, the "further results" in result_notes, and the location sheet.
+
+`dashboard` writes `data/05_eval/<run-id>/dashboard.html`: one self-contained page (no internet needed) that
+explains the comparison with examples, shows every answer-key result next to what each output has for it,
+and lists every value from both pipelines. Its "found" counts come from a hand check,
+`labels/gold_check_<run-id>.json`, not from compare's lenient match: for each answer-key result and each
+source, a verdict (yes / partial / no) and a piece of text that picks the row shown as evidence. The script
+stops if a picked row is not in the run. The page's sentences and examples were written for meetingsample01,
+so after a new run, re-check them.
 
 ## Outputs
 
@@ -52,3 +62,5 @@ data/05_eval/<run-id>/
 - `scoring.py` - matches extracted facts to reviewed labels (value, metric, unit and scope must all match).
 - `benchmark.py` - creates the unreviewed answer key from the test set.
 - `compare.py` - optional: the run against the R pipeline's output and the gold answers.
+- `dashboard.py`, `dashboard_template.html` - optional: the shareable HTML page for a run.
+- `labels/gold_check_<run-id>.json` - the hand check the dashboard's "found" counts come from.

@@ -1,0 +1,343 @@
+{
+  "run_id": "meetingsample01",
+  "checked_on": "2026-11-18",
+  "how": "One entry per answer-key result (test_set/reference_gold_results.csv). For each source, verdict is yes (same number AND the same thing counted), partial (right number, wrong label) or no. row is a piece of text that picks the row shown as evidence: for R it must appear in the R entry's text, for our methods in the row's indicator or value. why explains anything not obvious. Checked by reading every row with the same number in both outputs.",
+  "results": [
+    {
+      "report": "P001",
+      "value": "15",
+      "r": {
+        "verdict": "yes",
+        "row": "countries supported"
+      },
+      "hybrid": {
+        "verdict": "yes",
+        "row": "Countries"
+      },
+      "full_parsed": {
+        "verdict": "yes",
+        "row": "Countries"
+      },
+      "full_pdf": {
+        "verdict": "yes",
+        "row": "Countries"
+      },
+      "why": ""
+    },
+    {
+      "report": "P001",
+      "value": "12",
+      "r": {
+        "verdict": "yes",
+        "row": "knowledge products"
+      },
+      "hybrid": {
+        "verdict": "yes",
+        "row": "knowledge"
+      },
+      "full_parsed": {
+        "verdict": "yes",
+        "row": "knowledge"
+      },
+      "full_pdf": {
+        "verdict": "yes",
+        "row": "knowledge"
+      },
+      "why": ""
+    },
+    {
+      "report": "P001",
+      "value": ">1000",
+      "r": {
+        "verdict": "no",
+        "row": null
+      },
+      "hybrid": {
+        "verdict": "no",
+        "row": null
+      },
+      "full_parsed": {
+        "verdict": "no",
+        "row": null
+      },
+      "full_pdf": {
+        "verdict": "no",
+        "row": null
+      },
+      "why": "Nobody found it. The number is in a paragraph of text (page 17), not in the results table."
+    },
+    {
+      "report": "P001",
+      "value": "N",
+      "r": {
+        "verdict": "no",
+        "row": null
+      },
+      "hybrid": {
+        "verdict": "yes",
+        "row": "Knowledge Platform"
+      },
+      "full_parsed": {
+        "verdict": "yes",
+        "row": "Knowledge Platform"
+      },
+      "full_pdf": {
+        "verdict": "yes",
+        "row": "Knowledge Platform"
+      },
+      "why": "A yes/no milestone. The R pipeline leaves yes/no indicators out of its results on purpose, so it was never going to list this."
+    },
+    {
+      "report": "P006",
+      "value": "120",
+      "r": {
+        "verdict": "yes",
+        "row": "farmers reached"
+      },
+      "hybrid": {
+        "verdict": "no",
+        "row": "women out of 120"
+      },
+      "full_parsed": {
+        "verdict": "yes",
+        "row": "Farmers trained"
+      },
+      "full_pdf": {
+        "verdict": "yes",
+        "row": "farmers trained"
+      },
+      "why": "Hybrid only has 120 inside \"29 women out of 120\", which is a different result (the women). The automatic count gave it credit; by hand it does not count."
+    },
+    {
+      "report": "P006",
+      "value": "10000",
+      "r": {
+        "verdict": "yes",
+        "row": "nearly ten thousand"
+      },
+      "hybrid": {
+        "verdict": "yes",
+        "row": "farm managers"
+      },
+      "full_parsed": {
+        "verdict": "yes",
+        "row": "Farm managers"
+      },
+      "full_pdf": {
+        "verdict": "no",
+        "row": null
+      },
+      "why": "Full PDF did not list it."
+    },
+    {
+      "report": "P006",
+      "value": "24",
+      "r": {
+        "verdict": "yes",
+        "row": "i.e. 24%"
+      },
+      "hybrid": {
+        "verdict": "yes",
+        "row": "share of women"
+      },
+      "full_parsed": {
+        "verdict": "yes",
+        "row": "Women share"
+      },
+      "full_pdf": {
+        "verdict": "no",
+        "row": "other farmers contacted"
+      },
+      "why": "R's entry is right but very short: \"24 i.e. 24% (pilot farmers)\" does not say it is the share of women. Full PDF only has a different 24 (farmers contacted per pilot farmer)."
+    },
+    {
+      "report": "P010",
+      "value": "301",
+      "r": {
+        "verdict": "yes",
+        "row": "technologies made available"
+      },
+      "hybrid": {
+        "verdict": "yes",
+        "row": "Technologies"
+      },
+      "full_parsed": {
+        "verdict": "yes",
+        "row": "Technologies"
+      },
+      "full_pdf": {
+        "verdict": "yes",
+        "row": "Technologies"
+      },
+      "why": ""
+    },
+    {
+      "report": "P010",
+      "value": "4612946",
+      "r": {
+        "verdict": "yes",
+        "row": "Direct project"
+      },
+      "hybrid": {
+        "verdict": "yes",
+        "row": "Direct project"
+      },
+      "full_parsed": {
+        "verdict": "yes",
+        "row": "Direct project"
+      },
+      "full_pdf": {
+        "verdict": "yes",
+        "row": "Direct project"
+      },
+      "why": "R has it only in its notes column, not in its 3 main result slots."
+    },
+    {
+      "report": "P010",
+      "value": "4600000",
+      "r": {
+        "verdict": "no",
+        "row": null
+      },
+      "hybrid": {
+        "verdict": "no",
+        "row": null
+      },
+      "full_parsed": {
+        "verdict": "no",
+        "row": null
+      },
+      "full_pdf": {
+        "verdict": "no",
+        "row": null
+      },
+      "why": "The answer key itself says this is a rounded restatement of 4,612,946, which everyone found. Not really a separate result."
+    },
+    {
+      "report": "P010",
+      "value": "95",
+      "r": {
+        "verdict": "partial",
+        "row": "smallholder farmers reached"
+      },
+      "hybrid": {
+        "verdict": "yes",
+        "row": "Lead Farmers"
+      },
+      "full_parsed": {
+        "verdict": "yes",
+        "row": "Lead Farmers"
+      },
+      "full_pdf": {
+        "verdict": "yes",
+        "row": "Percentage of LF"
+      },
+      "why": "R has 95% but calls it \"smallholder farmers reached\". The report says it is lead farmers aware of a technology. Right number, wrong label."
+    },
+    {
+      "report": "P010",
+      "value": "80",
+      "r": {
+        "verdict": "yes",
+        "row": "technologies released"
+      },
+      "hybrid": {
+        "verdict": "yes",
+        "row": "released in another"
+      },
+      "full_parsed": {
+        "verdict": "yes",
+        "row": "released in another"
+      },
+      "full_pdf": {
+        "verdict": "yes",
+        "row": "released in another"
+      },
+      "why": ""
+    },
+    {
+      "report": "P010",
+      "value": "83",
+      "r": {
+        "verdict": "no",
+        "row": null
+      },
+      "hybrid": {
+        "verdict": "no",
+        "row": null
+      },
+      "full_parsed": {
+        "verdict": "no",
+        "row": null
+      },
+      "full_pdf": {
+        "verdict": "no",
+        "row": null
+      },
+      "why": "The answer key itself says \"NOT LOCATED with confidence - check gold\". It has no indicator or page, so nobody can be checked against it."
+    },
+    {
+      "report": "P010",
+      "value": "40472",
+      "r": {
+        "verdict": "yes",
+        "row": "Lead Farmers"
+      },
+      "hybrid": {
+        "verdict": "yes",
+        "row": "Lead Farmers"
+      },
+      "full_parsed": {
+        "verdict": "yes",
+        "row": "Lead Farmers"
+      },
+      "full_pdf": {
+        "verdict": "yes",
+        "row": "Lead Farmers"
+      },
+      "why": "R has it only in its notes column, not in its 3 main result slots."
+    },
+    {
+      "report": "P010",
+      "value": "175",
+      "r": {
+        "verdict": "yes",
+        "row": "Technologies generated"
+      },
+      "hybrid": {
+        "verdict": "yes",
+        "row": "Technologies generated"
+      },
+      "full_parsed": {
+        "verdict": "yes",
+        "row": "Technologies generated"
+      },
+      "full_pdf": {
+        "verdict": "yes",
+        "row": "Technologies generated"
+      },
+      "why": "R has it only in its notes column, not in its 3 main result slots."
+    },
+    {
+      "report": "P010",
+      "value": "37",
+      "r": {
+        "verdict": "yes",
+        "row": "Female beneficiaries"
+      },
+      "hybrid": {
+        "verdict": "yes",
+        "row": "of which female"
+      },
+      "full_parsed": {
+        "verdict": "yes",
+        "row": "Female beneficiaries"
+      },
+      "full_pdf": {
+        "verdict": "yes",
+        "row": "Female beneficiaries"
+      },
+      "why": "R's notes list two 37s; the one that matches is \"37 Female beneficiaries\"."
+    }
+  ]
+}

@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Results extraction pilot</title>
+<style>
+:root {
+  --font-anthropic-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-anthropic-serif: Georgia, "Times New Roman", serif;
+  --color-fg: #1f1e1c; --color-fg-muted: #6b6862; --color-bg: #ffffff; --color-panel: #f7f6f3; --color-border-line: #e2dfd8;
+  --color-ok: #2f7d4f; --color-warn: #a86a12; --color-bad: #b3412e;
+  --cds-font-size-caption: 13px; --cds-font-size-body: 15px; --cds-font-size-heading: 20px; --cds-font-size-title: 30px; --cds-font-weight-medium: 600;
+  --cds-gap-xs: 4px; --cds-gap-sm: 8px; --cds-gap-md: 14px; --cds-gap-lg: 20px; --cds-gap-xl: 28px;
+  --cds-pad-sm: 6px; --cds-pad-md: 10px; --cds-pad-lg: 16px; --cds-radius: 8px;
+  --cds-chart-grid: #ebe8e1; --cds-chart-axis: #c9c5bc; --cds-chart-muted: #a9a59c; --cds-text-secondary: #6b6862;
+  --cds-surface-popover: #ffffff; --cds-border: #e2dfd8; --cds-shadow-popover: 0 4px 14px rgba(0,0,0,.12);
+  --c1: #3b6fb6; --c2: #d07a2d; --c3: #5a9e6f;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --color-fg: #ecebe8; --color-fg-muted: #a7a39b; --color-bg: #1b1a18; --color-panel: #24231f; --color-border-line: #3a3833;
+  --color-ok: #6cc08b; --color-warn: #e0a54a; --color-bad: #ec8a76;
+  --cds-chart-grid: #33312c; --cds-chart-axis: #4a4740; --cds-chart-muted: #77736a; --cds-text-secondary: #a7a39b;
+  --cds-surface-popover: #2a2925; --cds-border: #3a3833; --c1: #7aa5e3; --c2: #e7a160; --c3: #86c79a;
+} }
+html { background: var(--color-bg); }
+body { margin: 0; padding: 24px 16px 48px; background: var(--color-bg); color: var(--color-fg); font-family: var(--font-anthropic-sans); font-size: var(--cds-font-size-body); }
+.xp { max-width: 1240px; margin: 0 auto; }
+.xp code { font-size: 0.92em; }
+.dash-select { font: inherit; font-size: var(--cds-font-size-caption); padding: 5px 8px; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); background-color: var(--color-bg); color: var(--color-fg); }
+.xp-generated { max-width: 1240px; margin: 32px auto 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+@media print { .xp-scroll { overflow: visible !important; max-height: none !important; } .xp th { position: static; } .xp-filters { display: none; } .xp td.wrap, .xp td.wide { min-width: 0; } }
+
+
+  .xp { display: flex; flex-direction: column; gap: calc(var(--cds-gap-xl) * 1.5); font-family: var(--font-anthropic-sans); color: var(--color-fg); }
+  .xp h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+  .xp h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; text-wrap: balance; }
+  .xp h3 { font-size: var(--cds-font-size-body); font-weight: var(--cds-font-weight-medium); margin: 0; }
+  .xp p, .xp li { line-height: 1.55; }
+  .xp p { margin: 0; max-width: 78ch; }
+  .xp-muted { color: var(--color-fg-muted); }
+  .xp-small { font-size: var(--cds-font-size-caption); }
+  .xp-num { font-variant-numeric: tabular-nums; }
+  .xp-section { display: flex; flex-direction: column; gap: var(--cds-gap-md); min-width: 0; }
+  .xp-step { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .xp-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-sm); min-width: 0; }
+  .xp-grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--cds-gap-md); }
+  .xp-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--cds-gap-md); }
+  .xp-example { border-left: 3px solid var(--color-border-line); padding: var(--cds-pad-sm) var(--cds-pad-md); background: var(--color-bg); border-radius: 0 var(--cds-radius) var(--cds-radius) 0; display: flex; flex-direction: column; gap: 6px; font-size: var(--cds-font-size-caption); }
+  .xp-example b.lbl { text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.9em; color: var(--color-fg-muted); font-weight: var(--cds-font-weight-medium); }
+  .xp-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: 4px; padding: 4px 6px; white-space: pre-wrap; word-break: break-word; display: block; }
+  .xp-score { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--cds-gap-md); }
+  .xp-score .xp-card { gap: 4px; }
+  .xp-label { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .xp-big { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: calc(var(--cds-font-size-title) * 1.2); line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .xp-big small { font-size: 0.5em; color: var(--color-fg-muted); }
+  .xp-r { border-style: dashed; }
+  .xp ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: var(--cds-gap-xs); max-width: 80ch; }
+  .xp dl { margin: 0; display: flex; flex-direction: column; gap: var(--cds-gap-xs); }
+  .xp dt { font-size: var(--cds-font-size-caption); text-transform: uppercase; letter-spacing: 0.04em; margin-top: var(--cds-gap-xs); font-weight: var(--cds-font-weight-medium); }
+  .xp dt.plus { color: var(--color-ok); }
+  .xp dt.minus { color: var(--color-bad); }
+  .xp dd { margin: 0 0 6px 0; line-height: 1.5; }
+  .xp dd .ex { display: block; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); margin-top: 2px; }
+  .xp-scroll { overflow-x: auto; min-width: 0; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); }
+  .xp-scroll.tall { max-height: 720px; overflow-y: auto; }
+  .xp table { border-collapse: collapse; width: 100%; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+  .xp th { text-align: left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); padding: var(--cds-pad-sm) var(--cds-pad-md); border-bottom: 1px solid var(--color-border-line); background: var(--color-panel); vertical-align: bottom; position: sticky; top: 0; z-index: 1; }
+  .xp td { padding: var(--cds-pad-sm) var(--cds-pad-md); border-bottom: 1px solid var(--color-border-line); vertical-align: top; }
+  .xp td.n, .xp th.n { text-align: right; white-space: nowrap; }
+  .xp td.wrap { min-width: 140px; max-width: 250px; }
+  .xp-cell .xp-chip { align-self: flex-start; white-space: normal; }
+  .xp td.wide { min-width: 240px; max-width: 460px; }
+  .xp tr:last-child td { border-bottom: 0; }
+  .xp tr.flagged td { background: color-mix(in srgb, var(--color-warn) 7%, transparent); }
+  .xp-chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: var(--cds-font-size-caption); white-space: nowrap; border: 1px solid var(--color-border-line); font-weight: var(--cds-font-weight-medium); }
+  .xp-chip.ok { color: var(--color-ok); border-color: var(--color-ok); }
+  .xp-chip.bad { color: var(--color-bad); border-color: var(--color-bad); }
+  .xp-chip.warn { color: var(--color-warn); border-color: var(--color-warn); }
+  .xp-chip.mute { color: var(--color-fg-muted); }
+  .xp-cell { display: flex; flex-direction: column; gap: 3px; }
+  .xp-cell .v { font-weight: var(--cds-font-weight-medium); }
+  .xp-cell .t { color: var(--color-fg-muted); }
+  .xp-filters { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: center; }
+  .xp-filters input[type="search"] { font: inherit; font-size: var(--cds-font-size-caption); padding: 6px 10px; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); background-color: var(--color-bg); color: var(--color-fg); min-width: 0; flex: 1 1 220px; }
+  .xp-filters label { display: inline-flex; align-items: center; gap: 6px; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .xp-chart { position: relative; min-height: 240px; width: 100%; }
+  .xp-chart-sm { position: relative; min-height: 150px; width: 100%; }
+  .xp-chart svg text, .xp-chart-sm svg text { fill: var(--cds-text-secondary); font-size: var(--cds-font-size-caption); }
+  .xp-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm) var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .xp-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .xp-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .xp-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); box-shadow: var(--cds-shadow-popover); border-radius: var(--cds-radius); padding: var(--cds-pad-sm) var(--cds-pad-md); font-size: var(--cds-font-size-caption); color: var(--color-fg); white-space: nowrap; z-index: 2; }
+  .xp details summary { cursor: pointer; font-weight: var(--cds-font-weight-medium); }
+  .xp-toc { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: var(--cds-font-size-caption); }
+  .xp-toc a { color: var(--color-fg-muted); }
+
+</style>
+</head>
+<body>
+<div class="xp">
+
+  <header class="xp-section" id="top">
+    <h1>Results extraction pilot: where we are</h1>
+    <p>We ran our extraction pipeline on 3 reports and compared it with two things: a hand-made answer key, and the output the Alliance's current pipeline (in R) already saved for the same reports. On the answer key's <b class="xp-num" data-draw="num" data-source="tally" data-field="total" data-where="source=r">—</b> results, the current pipeline found <b class="xp-num" data-draw="num" data-source="tally" data-field="yes" data-where="source=r">—</b> and our three methods found <b class="xp-num" data-draw="num" data-source="tally" data-field="yes" data-where="source=full_pdf">—</b> to <b class="xp-num" data-draw="num" data-source="tally" data-field="yes" data-where="source=full_parsed">—</b>. So on finding results, the two pipelines are about even. The differences are in how each result is written down and checked, and in which other numbers each one pulls out.</p>
+    <p class="xp-small xp-muted">Our run: <b>meetingsample01</b>, 17 Nov 2026, model gpt-5.4-mini (low reasoning). Every "found" on this page was checked by hand on 18 Nov 2026. Reports: P001 (World Bank completion report, TerrAfrica), P006 (African Development Bank evaluation, pest management around Lake Chad), P010 (World Bank completion report, APPSA).</p>
+    <nav class="xp-toc" aria-label="Sections">
+      <a href="#what">1. What we compared</a>
+      <a href="#found">2. Did we find the answer-key results?</a>
+      <a href="#more">3. Who pulled out more numbers?</a>
+      <a href="#methods">4. Our three methods</a>
+      <a href="#pages">5. Page checks and page repair</a>
+      <a href="#sw">6. Strengths and weaknesses</a>
+      <a href="#takeaways">7. What this tells us, and what it doesn't</a>
+      <a href="#all">8. Every extracted value</a>
+    </nav>
+  </header>
+
+  <section class="xp-section" id="what">
+    <span class="xp-step">1</span>
+    <h2>What we compared</h2>
+    <p>Three sets of output for the same 3 reports.</p>
+    <div class="xp-grid3">
+      <div class="xp-card">
+        <h3>The answer key ("gold set")</h3>
+        <p>The Alliance's template owner read 10 reports (P001 to P010) by hand and listed the results each one reports, with the page. The list was then audited field by field against the PDFs. For our 3 reports it lists 16 results.</p>
+        <div class="xp-example">
+          <b class="lbl">One row of it</b>
+          <span class="xp-code">P010 · 175 · technologies generated · Number · page 39</span>
+        </div>
+        <p class="xp-small xp-muted">2 of the 16 are flagged by the key itself: one is a rounded copy of another value, and one says "NOT LOCATED with confidence - check gold". File: <code>test_set/reference_gold_results.csv</code>.</p>
+      </div>
+      <div class="xp-card xp-r">
+        <h3>The current pipeline's output (R)</h3>
+        <p>Already saved in the repo from an earlier run (its protocol says it uses gpt-5-mini). It writes results in three places, and we count all three:</p>
+        <ul class="xp-small">
+          <li><b>result1 to result3:</b> 3 headline results per report.</li>
+          <li><b>"further results"</b> inside a free-text notes column, one long sentence per report.</li>
+          <li><b>the location sheet:</b> one row per place, intervention and result.</li>
+        </ul>
+        <div class="xp-example">
+          <b class="lbl">Part of P010's notes cell</b>
+          <span class="xp-code">further results: … 175 Technologies generated (Regional (all crops), p39); … 4612946 Direct project beneficiaries (Regional (Malawi, Mozambique, Zambia), p37); 37 Female beneficiaries (…, p37)</span>
+        </div>
+        <p class="xp-small xp-muted">Its prompts were developed on these same 10 reports, so its own README says scores on them run higher than on new reports. Files: <code>test_set/pipeline_general.csv</code>, <code>test_set/pipeline_gold_locations.csv</code>.</p>
+      </div>
+      <div class="xp-card">
+        <h3>Our output</h3>
+        <p>One row per result: the value, the indicator as the report words it, the page, a quote, and baseline, target and year when the report gives them. We ran it three ways, which differ only in what the model reads (see section 4).</p>
+        <div class="xp-example">
+          <b class="lbl">One of our rows (hybrid, P010)</b>
+          <span class="xp-code">Direct project beneficiaries · 4612946.00 · Number · page 37 · baseline 0 · target 6100000 · year 2020
+quote: "| Direct project beneficiaries | Number | 0.00 14-Mar-2013 | 6100000.00 14-Mar-2013 | | 4612946.00 31-Jan-2020 |"</span>
+        </div>
+        <p class="xp-small"><b>Baseline</b> is where the number stood when the project started (0 beneficiaries in 2013). <b>Target</b> is what the project promised to reach (6,100,000). <b>Year</b> is when the achieved value was measured (31 Jan 2020). Together they show whether the project hit its goal: 4,612,946 of 6,100,000 is about 76%, which the report itself says. We fill them only when the report states them, mostly in results tables; for hybrid that's 25 of 78 rows for baseline and target, and 40 for year.</p>
+        <p class="xp-small xp-muted">The same result in R's output is the line "4612946 Direct project beneficiaries (Regional (Malawi, Mozambique, Zambia), p37)" inside its notes cell. R's saved files have no baseline or target columns.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="xp-section" id="found">
+    <span class="xp-step">2</span>
+    <h2>Did each pipeline find the answer-key results?</h2>
+    <p>For each of the 16 answer-key results, we looked for it in each output and read what was there. It counts as found only if it is the same result: same number <i>and</i> the same thing being counted.</p>
+    <div class="xp-score">
+      <div class="xp-card xp-r">
+        <span class="xp-label">Current pipeline (R)</span>
+        <span class="xp-big"><span data-draw="num" data-source="tally" data-field="yes" data-where="source=r">—</span><small> of <span data-draw="num" data-source="tally" data-field="total" data-where="source=r">—</span></small></span>
+        <span class="xp-small xp-muted">plus <span data-draw="num" data-source="tally" data-field="partial" data-where="source=r">—</span> with the right number but the wrong label</span>
+      </div>
+      <div class="xp-card">
+        <span class="xp-label">Ours: hybrid search</span>
+        <span class="xp-big"><span data-draw="num" data-source="tally" data-field="yes" data-where="source=hybrid">—</span><small> of <span data-draw="num" data-source="tally" data-field="total" data-where="source=hybrid">—</span></small></span>
+      </div>
+      <div class="xp-card">
+        <span class="xp-label">Ours: full parsed text</span>
+        <span class="xp-big"><span data-draw="num" data-source="tally" data-field="yes" data-where="source=full_parsed">—</span><small> of <span data-draw="num" data-source="tally" data-field="total" data-where="source=full_parsed">—</span></small></span>
+      </div>
+      <div class="xp-card">
+        <span class="xp-label">Ours: full PDF</span>
+        <span class="xp-big"><span data-draw="num" data-source="tally" data-field="yes" data-where="source=full_pdf">—</span><small> of <span data-draw="num" data-source="tally" data-field="total" data-where="source=full_pdf">—</span></small></span>
+      </div>
+    </div>
+    <p class="xp-small xp-muted">Out of 14 instead of 16 if you leave out the 2 rows the answer key flags itself; nobody found those 2. The automatic count in <code>compare.py</code> (which only checks that the number appears) gave R 12, hybrid 13, full parsed 13 and full PDF 12. Reading the rows showed 3 of those were a different result with the same number; they are marked in the table and explained in its last column.</p>
+
+    <div class="xp-scroll">
+      <table data-source="gold_check" data-row-key="report,gold_value" aria-label="Each answer-key result and what each output has for it">
+        <thead>
+          <tr>
+            <th data-field="report">Report</th>
+            <th data-field="gold_indicator">Answer key says</th>
+            <th data-field="r_verdict">Current pipeline (R)</th>
+            <th data-field="hybrid_verdict">Hybrid</th>
+            <th data-field="full_parsed_verdict">Full parsed</th>
+            <th data-field="full_pdf_verdict">Full PDF</th>
+            <th data-field="why">What happened</th>
+          </tr>
+        </thead>
+        <tbody data-draw="goldtable"></tbody>
+      </table>
+    </div>
+    <p class="xp-small xp-muted">For R, "where" says which of its three places the result sits in. "p37" in R's cells is the page R wrote in its notes; R's 3 headline slots carry no page. For ours, "checked on page" means our code found the number on that PDF page (section 5).</p>
+  </section>
+
+  <section class="xp-section" id="more">
+    <span class="xp-step">3</span>
+    <h2>Who pulled out more numbers overall?</h2>
+    <p>The current pipeline did. Its output has <b class="xp-num" data-draw="num" data-source="counts" data-field="rows" data-where="report=All&amp;source=R%20pipeline">—</b> values for these 3 reports. Ours has <b class="xp-num" data-draw="num" data-source="counts" data-field="rows" data-where="report=All&amp;source=full_parsed">—</b> to <b class="xp-num" data-draw="num" data-source="counts" data-field="rows" data-where="report=All&amp;source=hybrid">—</b> per method. But the counts are not like for like, and neither list contains the other. Each pulled out numbers the other skipped.</p>
+    <div class="xp-legend" data-draw="legend"></div>
+    <div class="xp-chart" data-draw="countchart" data-source="counts"></div>
+    <div class="xp-grid3">
+      <div class="xp-card">
+        <h3>P001: R's extra rows are mostly the number 1</h3>
+        <p class="xp-small">R's location sheet has one row per place, and most of them carry the value 1 (one country supported, one workshop held). That is <b class="xp-num" data-draw="num" data-source="counts" data-field="ones" data-where="report=P001&amp;source=R%20pipeline">—</b> of its <b class="xp-num" data-draw="num" data-source="counts" data-field="rows" data-where="report=P001&amp;source=R%20pipeline">—</b> values for P001.</p>
+        <div class="xp-example"><b class="lbl">R, location sheet</b><span class="xp-code">1 · received support on their SLWM Country Strategic Investment Framework (CSIF)</span></div>
+      </div>
+      <div class="xp-card">
+        <h3>P006: R copied a whole yield table</h3>
+        <p class="xp-small">Page 23 has a table of crop yields per country and year: farmer field school plot, control plot, and percent increase. R's notes list nearly all of it. Ours list some of the field school yields and skip the control-plot yields and the table's percent increases.</p>
+        <div class="xp-example"><b class="lbl">Only in R</b><span class="xp-code">1417 Cameroon Sorghum Yields 2003 (kg/ha) Control Plot (control plots 2003, p23)
+163 Sorghum increase rate (Cameroon) 2003 (FFS vs control 2003, p23)</span>
+        <b class="lbl">In both</b><span class="xp-code">3726 kg/ha · sorghum yield, Cameroon, 2003 (field school plot)</span></div>
+      </div>
+      <div class="xp-card">
+        <h3>P010: we pulled out more breakdowns</h3>
+        <p class="xp-small">The report has an annex table with each indicator by country. We list its beneficiary breakdowns (total, lead farmers, share female); R lists only its technologies row. R lists building works and seed amounts; we do not.</p>
+        <div class="xp-example"><b class="lbl">Only in ours</b><span class="xp-code">Direct beneficiaries · 2,338,654 / 1,000,000 / 1,274,292 (Malawi / Mozambique / Zambia), page 56</span>
+        <b class="lbl">Only in R</b><span class="xp-code">5 · Rehabilitated 5 Laboratories: Soil Chemistry, Soil Physics, Seed Laboratory, …
+1800 · Maintenance &amp; multiplication 1800kg breeders seed (Groundnut - Msekera Research Station)</span></div>
+      </div>
+    </div>
+    <p class="xp-small xp-muted">More values is not the same as more right values. We have not checked how many of either side's extra values are correct or useful. Section 8 lists every value from both sides.</p>
+  </section>
+
+  <section class="xp-section" id="methods">
+    <span class="xp-step">4</span>
+    <h2>Our three methods side by side</h2>
+    <p>All three use the same model, the same instructions and the same checks. Only what the model reads changes:</p>
+    <ul>
+      <li><b>Hybrid search:</b> we split the report into chunks, search them for the parts likely to hold results, and send the model the best chunks, up to about 12,000 tokens (roughly 9,000 words).</li>
+      <li><b>Full parsed text:</b> we turn the whole PDF into text (keeping tables) and send all of it.</li>
+      <li><b>Full PDF:</b> we send the PDF file itself and let the model read it.</li>
+    </ul>
+    <div class="xp-scroll">
+      <table data-source="methods" data-row-key="source" aria-label="Our three methods compared">
+        <thead>
+          <tr>
+            <th data-field="name">Method</th>
+            <th class="n" data-source="tally" data-field="yes">Answer-key results found</th>
+            <th class="n" data-field="rows">Values pulled out</th>
+            <th class="n" data-field="cost_usd">Cost, 3 reports</th>
+            <th class="n" data-field="cost_per_report">Cost per report</th>
+            <th class="n" data-field="seconds">Model time</th>
+            <th class="n" data-field="page_right_first_time_pct">Model's page was right</th>
+            <th class="n" data-field="verified_pct">Number found on its page</th>
+            <th class="n" data-field="needs_review_pct">Flagged for review</th>
+          </tr>
+        </thead>
+        <tbody data-draw="methodtable"></tbody>
+      </table>
+    </div>
+    <ul class="xp-small xp-muted">
+      <li><b>Cost</b> is what OpenAI charged for this run (token counts at list price). The current pipeline's protocol estimates about $0.10 per report for its extraction; we have no cost record for its saved run.</li>
+      <li><b>Model's page was right</b>, <b>number found on its page</b> and <b>flagged for review</b> are explained with examples in section 5.</li>
+    </ul>
+  </section>
+
+  <section class="xp-section" id="pages">
+    <span class="xp-step">5</span>
+    <h2>Page checks and page repair</h2>
+    <p>The model tells us which page each value is on. We don't take its word for it. After the model answers, our code opens the PDF and checks:</p>
+    <ul>
+      <li><b>Is the number printed on that page?</b> If yes, the row is marked "checked on page".</li>
+      <li><b>If not, is there exactly one page that has both the number and the quote?</b> Then the code moves the row to that page. That is a <b>page repair</b>. The model's original page is kept in the row, so nothing is hidden.</li>
+      <li><b>Is the quote really in the PDF?</b> If not, the row is <b>flagged for review</b>.</li>
+    </ul>
+    <div class="xp-example">
+      <b class="lbl">A page repair, full PDF, P010</b>
+      <span>The model said "Technologies generated: 175" is on <b>page 34</b>. Page 34 of the PDF doesn't have it. PDF page 39 does, and the top of PDF page 39 is printed "Page 34 of 68". The model used the page number printed on the paper, not the PDF's page. The code moved the row to page 39.</span>
+    </div>
+    <h3>How often was the model's page right?</h3>
+    <div class="xp-chart-sm" data-draw="pagechart" data-source="page_repairs"></div>
+    <p>Full PDF's mistakes follow one pattern: in <b class="xp-num" data-draw="num" data-source="page_repairs" data-field="top_offset_count" data-where="method=full_pdf">—</b> of its <b class="xp-num" data-draw="num" data-source="page_repairs" data-field="repaired" data-where="method=full_pdf">—</b> repairs the real page was exactly <b class="xp-num" data-draw="signed" data-source="page_repairs" data-field="top_offset" data-where="method=full_pdf">—</b> pages later, which is the length of the cover pages before "Page 1". Hybrid and full parsed read text where we mark each page, so they almost never get it wrong.</p>
+    <h3>Why are rows flagged for review?</h3>
+    <p>Most flags are about the quote, not the number. For tables, the model often joins pieces that are far apart in the PDF into one quote, and our quote check can't find that joined text. The number itself was still found on the page in <b class="xp-num" data-draw="num" data-source="review" data-field="flagged_value_ok" data-where="method=hybrid">—</b> of hybrid's <b class="xp-num" data-draw="num" data-source="review" data-field="flagged" data-where="method=hybrid">—</b> flagged rows.</p>
+    <div class="xp-example">
+      <b class="lbl">A flagged row (hybrid, P001)</b>
+      <span class="xp-code">New knowledge and advocacy products disseminated at country level · 12.00 · page 34 · number found on page: yes
+quote: "New knowledge and advocacy products disseminated at country level ... Actual Achieved at Completion | 12.00 15-Jun-2018"
+flag: Quote not found in the PDF</span>
+      <span>The label, the column header and the value are all on page 34, but not next to each other, so the joined quote isn't found word for word.</span>
+    </div>
+    <p class="xp-small xp-muted">Full PDF is flagged far more often (<b class="xp-num" data-draw="pct" data-source="methods" data-field="needs_review_pct" data-where="source=full_pdf">—</b> of rows) because most of its quotes are not word for word in the PDF: it tends to reword or stitch them together instead of copying the text. The current pipeline's protocol says it also checks each value against its cited page, but the saved files don't include those check results, so we can't compare.</p>
+  </section>
+
+  <section class="xp-section" id="sw">
+    <span class="xp-step">6</span>
+    <h2>Strengths and weaknesses</h2>
+    <div class="xp-grid2">
+      <div class="xp-card xp-r">
+        <h3>Current pipeline (R)</h3>
+        <dl>
+          <dt class="plus">Strengths</dt>
+          <dd>Found about as many answer-key results as we did (<span class="xp-num" data-draw="num" data-source="tally" data-field="yes" data-where="source=r">—</span> of <span class="xp-num" data-draw="num" data-source="tally" data-field="total" data-where="source=r">—</span>).</dd>
+          <dd>Fills the Alliance's whole template, not just results: project details, budget, actors and locations, mapped to the Alliance's code lists.
+            <span class="ex">Its location sheet has one row per place with a location code, which ours does not have.</span></dd>
+          <dd>Pulls out more numbers in total, for example the whole yield table in P006.</dd>
+          <dt class="minus">Weaknesses</dt>
+          <dd>Many results are not in proper columns. Of the <span class="xp-num" data-draw="num" data-source="tally" data-field="yes" data-where="source=r">—</span> answer-key results it found, <span class="xp-num" data-draw="num" data-source="tally" data-field="not_headline" data-where="source=r">—</span> are not in its 3 headline slots: they are in the free-text notes cell (one is also in the location sheet).
+            <span class="ex">Example: P010's 4,612,946 beneficiaries, 175 technologies, 40,472 lead farmers and 37% female are all inside one sentence.</span></dd>
+          <dd>Its 3 headline slots use short labels from the Alliance's metric list ("CANDIDATE:" when none fits), and one is wrong.
+            <span class="ex">Example: P010's 95% is labelled "smallholder farmers reached"; the report says it is lead farmers aware of a technology.</span></dd>
+          <dd>Leaves yes/no results out on purpose, so it can't record milestones like P001's "knowledge platform up and running: N".</dd>
+          <dd>Was developed on these same reports, so this is its best case.</dd>
+        </dl>
+      </div>
+      <div class="xp-card">
+        <h3>Our pipeline (all three methods)</h3>
+        <dl>
+          <dt class="plus">Strengths</dt>
+          <dd>Every result is its own row with value, indicator, page and quote, and baseline, target and year when the report gives them.
+            <span class="ex">Example: "Direct project beneficiaries · 4612946 · page 37 · baseline 0 · target 6,100,000 · year 2020".</span></dd>
+          <dd>Every page is checked against the PDF by code, and wrong pages are repaired (section 5).</dd>
+          <dd>Keeps yes/no milestones, labelled as milestones.</dd>
+          <dt class="minus">Weaknesses</dt>
+          <dd>Pulls out results only. It does not yet fill the rest of the Alliance template or map anything to its code lists (actors, locations, metric names).</dd>
+          <dd>Skipped numbers R kept, such as P006's control-plot yields.</dd>
+          <dd>Missed the same narrative result R missed.
+            <span class="ex">Example: P001's "more than 1,000 African participants in e-learning events" is in a paragraph on page 17; no output has it.</span></dd>
+          <dd>Many quotes are flagged because they join table pieces (section 5).</dd>
+        </dl>
+      </div>
+      <div class="xp-card">
+        <h3>Hybrid search</h3>
+        <dl>
+          <dt class="plus">Strengths</dt>
+          <dd>Cheapest: <span class="xp-num" data-draw="usd" data-source="methods" data-field="cost_per_report" data-where="source=hybrid">—</span> per report, about a third of full PDF.</dd>
+          <dd>Page right first time for <span class="xp-num" data-draw="pct" data-source="methods" data-field="page_right_first_time_pct" data-where="source=hybrid">—</span> of rows.</dd>
+          <dt class="minus">Weaknesses</dt>
+          <dd>Only sees the chunks the search picks, so anything outside them can't be found.</dd>
+          <dd>Missed one answer-key result the other two methods found.
+            <span class="ex">Example: P006's "120 pilot farmers trained" appears in hybrid's output only inside "29 women out of 120", not as its own result.</span></dd>
+        </dl>
+      </div>
+      <div class="xp-card">
+        <h3>Full parsed text</h3>
+        <dl>
+          <dt class="plus">Strengths</dt>
+          <dd>Found the most answer-key results (<span class="xp-num" data-draw="num" data-source="tally" data-field="yes" data-where="source=full_parsed">—</span>) and had the fewest rows flagged (<span class="xp-num" data-draw="pct" data-source="methods" data-field="needs_review_pct" data-where="source=full_parsed">—</span>).</dd>
+          <dt class="minus">Weaknesses</dt>
+          <dd>Sends the whole report, so it costs <span class="xp-num" data-draw="usd" data-source="methods" data-field="cost_per_report" data-where="source=full_parsed">—</span> per report and grows with report length.</dd>
+          <dd>Pulled out the fewest values (<span class="xp-num" data-draw="num" data-source="methods" data-field="rows" data-where="source=full_parsed">—</span>).</dd>
+        </dl>
+      </div>
+      <div class="xp-card">
+        <h3>Full PDF</h3>
+        <dl>
+          <dt class="plus">Strengths</dt>
+          <dd>Needs no conversion of the PDF, and is the only method where the model sees the pages as images, so it could read charts (with a higher image setting than this run used).</dd>
+          <dt class="minus">Weaknesses</dt>
+          <dd>Most expensive: <span class="xp-num" data-draw="usd" data-source="methods" data-field="cost_per_report" data-where="source=full_pdf">—</span> per report.</dd>
+          <dd>Gives the page number printed on the paper, so its page was right only <span class="xp-num" data-draw="pct" data-source="methods" data-field="page_right_first_time_pct" data-where="source=full_pdf">—</span> of the time before repair.</dd>
+          <dd>Found the fewest answer-key results (<span class="xp-num" data-draw="num" data-source="tally" data-field="yes" data-where="source=full_pdf">—</span>).
+            <span class="ex">Example: for P006's "24% of pilot farmers are women" it only has a different 24, "other farmers contacted per pilot farmer".</span></dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="xp-section" id="takeaways">
+    <span class="xp-step">7</span>
+    <div class="xp-grid2">
+      <div class="xp-card">
+        <h2>What this tells us</h2>
+        <ul>
+          <li><b>On finding results, the two pipelines are about even</b> on these 3 reports: <span class="xp-num" data-draw="num" data-source="tally" data-field="yes" data-where="source=r">—</span> for R and <span class="xp-num" data-draw="num" data-source="tally" data-field="yes" data-where="source=full_pdf">—</span> to <span class="xp-num" data-draw="num" data-source="tally" data-field="yes" data-where="source=full_parsed">—</span> for ours, out of <span class="xp-num" data-draw="num" data-source="tally" data-field="total" data-where="source=r">—</span>.</li>
+          <li><b>The real difference is the shape of the output.</b> Ours puts each result in its own row with a checked page and a quote. R's are often inside a notes sentence (see the 4,612,946 example in section 1).</li>
+          <li><b>Both missed the one result that is only in a paragraph</b>, not a table (P001's e-learning participants). It's one case, but it's the kind of thing to watch on more reports.</li>
+          <li><b>The answer key has problems of its own:</b> 2 of its 16 rows are flagged by the key itself, and nobody found them.</li>
+          <li><b>Hybrid search is the best value of our methods:</b> close to the best on results, the cheapest, and almost always on the right page.</li>
+        </ul>
+      </div>
+      <div class="xp-card">
+        <h2>What we can't claim yet</h2>
+        <ul>
+          <li><b>That we're better at finding results.</b> One or two results either way on 16 is noise.</li>
+          <li><b>How many of our values are right.</b> We checked the 16 answer-key results, not our other 200 or so rows. "Number found on its page" only means the number is printed there, not that it's the right indicator. Same for R's extra values.</li>
+          <li><b>How we'd do on new reports.</b> These are 3 of the 10 reports R was developed on. The 10 holdout reports (H001 to H010) are the fair test.</li>
+          <li><b>A same-model comparison.</b> R's saved output came from a different model (gpt-5-mini, per its protocol) and different prompts.</li>
+          <li><b>Anything about the rest of the template.</b> R's 91% accuracy figure is about project fields like budget and years, which this page doesn't test.</li>
+        </ul>
+        <h3>Next</h3>
+        <ul>
+          <li>Hand-check a random sample of our other rows, and R's, to see how many are right.</li>
+          <li>Run all 10 gold reports, then the 10 holdout reports once.</li>
+          <li>Score our project fields (budget, years, countries) with the Alliance's own scorer, <code>R/08_quality/score_pilot.R</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="xp-section" id="all">
+    <span class="xp-step">8</span>
+    <h2>Every extracted value, from both pipelines</h2>
+    <p class="xp-small xp-muted">R's rows have no quote or page check in its saved files. For R, "where" says which of its three places the value came from.</p>
+    <div class="xp-filters">
+      <label>Source <select class="dash-select" data-draw="fsource" aria-label="Source"></select></label>
+      <label>Report <select class="dash-select" data-draw="freport" aria-label="Report"></select></label>
+      <input type="search" id="f-search" placeholder="Search the indicator or quote" aria-label="Search the indicator or quote">
+    </div>
+    <p class="xp-small xp-muted" data-draw="explorecount">—</p>
+    <div class="xp-scroll tall">
+      <table data-source="all_results" data-row-key="row_id" aria-label="Every extracted value">
+        <thead>
+          <tr>
+            <th data-field="source">Source</th>
+            <th data-field="report">Report</th>
+            <th data-field="where">Where (R)</th>
+            <th data-field="indicator">Indicator / text</th>
+            <th class="n" data-field="value">Value</th>
+            <th data-field="unit">Unit</th>
+            <th class="n" data-field="page">Page</th>
+            <th data-field="verified">Number on page?</th>
+            <th data-field="quote">Quote</th>
+          </tr>
+        </thead>
+        <tbody data-draw="explore"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <details class="xp-card" id="definitions">
+    <summary>Where every number on this page comes from</summary>
+    <ul class="xp-small">
+      <li><b>Answer key:</b> <code>test_set/reference_gold_results.csv</code> (same rows as <code>catalogues/gold_v1_results.csv</code>).</li>
+      <li><b>R's output:</b> <code>test_set/pipeline_general.csv</code> (columns result1 to result3, and result_notes after "further results:") and <code>test_set/pipeline_gold_locations.csv</code> (rows with a value).</li>
+      <li><b>Our output, costs and times:</b> <code>rag-pipeline/data/04_extracted/meetingsample01/</code> and <code>rag-pipeline/data/05_eval/meetingsample01/compare/summary.json</code>.</li>
+      <li><b>"Found":</b> read by hand for each of the 16 answer-key results on 18 Nov 2026. The verdicts and the row shown for each are in <code>rag-pipeline/step05_evaluate/labels/gold_check_meetingsample01.json</code>.</li>
+      <li><b>Printed page numbers:</b> checked in the PDFs (for example, P010's PDF page 39 is printed "Page 34 of 68").</li>
+    </ul>
+  </details>
+
+</div>
+
+
+<p class="xp-generated">__GENERATED__</p>
+<script>
+const DATA = __DATA_JSON__;
+</script>
+<script>
+// Draws the page from DATA (written by step05_evaluate/dashboard.py). No libraries, works offline.
+(() => {
+  const NAMES = { 'R pipeline': 'Current pipeline (R)', r: 'Current pipeline (R)', hybrid: 'Hybrid search', full_parsed: 'Full parsed text', full_pdf: 'Full PDF' };
+  const ORDER = ['R pipeline', 'hybrid', 'full_parsed', 'full_pdf'];
+  const COLOR = { 'R pipeline': 'var(--cds-chart-muted)', r: 'var(--cds-chart-muted)', hybrid: 'var(--c1)', full_parsed: 'var(--c2)', full_pdf: 'var(--c3)' };
+  const SVG = 'http://www.w3.org/2000/svg';
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+  const svgEl = (tag, attrs, text) => { const e = document.createElementNS(SVG, tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v); if (text !== undefined) e.textContent = text; return e; };
+  const chip = (text, cls) => el('span', 'xp-chip ' + cls, text);
+  const draws = {};
+
+  // ---- numbers inside sentences: data-source + data-field + data-where="a=b&c=d" ----
+  const rowOf = (node) => {
+    const rows = DATA[node.dataset.source] || [];
+    const where = (node.dataset.where || '').split('&').filter(Boolean).map((p) => p.split('=').map(decodeURIComponent));
+    return rows.find((r) => where.every(([k, v]) => String(r[k]) === v)) || null;
+  };
+  const fill = (fmt) => (node) => {
+    const r = rowOf(node);
+    const v = r ? r[node.dataset.field] : null;
+    node.textContent = v === null || v === undefined || v === '' ? '—' : fmt(Number(v));
+  };
+  draws.num = fill((v) => v.toLocaleString('en-US'));
+  draws.usd = fill((v) => '$' + v.toFixed(2));
+  draws.pct = fill((v) => v.toFixed(1) + '%');
+  draws.signed = fill((v) => (v > 0 ? '+' : '') + v);
+
+  draws.legend = (box) => {
+    box.replaceChildren(...ORDER.map((s) => {
+      const span = el('span');
+      const sw = el('i', 'xp-swatch');
+      sw.style.background = COLOR[s];
+      span.append(sw, document.createTextNode(NAMES[s]));
+      return span;
+    }));
+  };
+
+  // ---- section 2: the answer-key table ----
+  const VERDICT = { yes: ['Found', 'ok'], partial: ['Right number, wrong label', 'warn'], no: ['Not found', 'bad'] };
+  draws.goldtable = (tbody) => {
+    tbody.replaceChildren();
+    for (const g of DATA.gold_check) {
+      const tr = el('tr', g.gold_note ? 'flagged' : '');
+      const td = (cls) => { const c = el('td', cls); tr.append(c); return c; };
+      td().textContent = g.report;
+      const key = el('div', 'xp-cell');
+      const pctUnit = g.gold_unit === '%' || g.gold_unit === 'Percentage';
+      key.append(el('span', 'v', g.gold_value + (pctUnit ? '%' : '')));
+      key.append(el('span', 't', (g.gold_indicator || '(no indicator given)') + (g.gold_page ? ` · page ${g.gold_page}` : '')));
+      if (g.gold_note) key.append(chip("Key's own note: " + g.gold_note, 'warn'));
+      td('wrap').append(key);
+      const r = el('div', 'xp-cell');
+      const [rt, rc] = VERDICT[g.r_verdict] || ['—', 'mute'];
+      r.append(chip(rt, rc));
+      if (g.r_value) {
+        r.append(el('span', 'v', g.r_value));
+        r.append(el('span', 't', g.r_text.length > 160 ? g.r_text.slice(0, 160) + '…' : g.r_text));
+        r.append(el('span', 't', 'where: ' + (g.r_where === 'further results (notes)' ? 'notes cell' : g.r_where)));
+      }
+      td('wrap').append(r);
+      for (const m of ['hybrid', 'full_parsed', 'full_pdf']) {
+        const c = el('div', 'xp-cell');
+        const [t, cl] = VERDICT[g[m + '_verdict']] || ['—', 'mute'];
+        c.append(chip(t, cl));
+        if (g[m + '_value']) {
+          c.append(el('span', 'v', g[m + '_value']));
+          c.append(el('span', 't', g[m + '_indicator']));
+          c.append(el('span', 't', `page ${g[m + '_page']} · ${g[m + '_verified'] === 'True' ? 'checked on page' : 'not found on that page'}`));
+        }
+        td('wrap').append(c);
+      }
+      td('wrap xp-muted').textContent = g.why || '';
+      tbody.append(tr);
+    }
+  };
+
+  // ---- section 3: values per report (grouped bars) ----
+  draws.countchart = (box) => {
+    box.replaceChildren();
+    const rows = DATA.counts.filter((r) => r.report !== 'All');
+    const reports = [...new Set(rows.map((r) => r.report))];
+    const W = Math.max(300, box.clientWidth || 800);
+    const H = 240;
+    const m = { top: 18, right: 8, bottom: 26, left: 34 };
+    const max = Math.max(1, ...rows.map((r) => r.rows));
+    const step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000].find((s) => max / s <= 5) || 2000;
+    const top = Math.ceil(max / step) * step;
+    const y = (v) => m.top + (H - m.top - m.bottom) * (1 - v / top);
+    const svg = svgEl('svg', { width: '100%', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Values pulled out per report, for the current pipeline and each of our methods' });
+    for (let v = 0; v <= top; v += step) {
+      svg.append(svgEl('line', { x1: m.left, x2: W - m.right, y1: y(v), y2: y(v), stroke: 'var(--cds-chart-grid)' }));
+      svg.append(svgEl('text', { x: m.left - 6, y: y(v) + 4, 'text-anchor': 'end' }, String(v)));
+    }
+    const groupW = (W - m.left - m.right) / reports.length;
+    const barW = (groupW * 0.75) / ORDER.length;
+    reports.forEach((rep, i) => {
+      const x0 = m.left + i * groupW + groupW * 0.125;
+      svg.append(svgEl('text', { x: x0 + (barW * ORDER.length) / 2, y: H - 6, 'text-anchor': 'middle' }, rep));
+      ORDER.forEach((s, j) => {
+        const r = rows.find((x) => x.report === rep && x.source === s);
+        if (!r) return;
+        const x = x0 + j * barW + barW * 0.08;
+        const w = barW * 0.84;
+        const rect = svgEl('rect', { x, y: y(r.rows), width: w, height: y(0) - y(r.rows), rx: 2 });
+        rect.style.fill = COLOR[s];
+        svg.append(rect);
+        svg.append(svgEl('text', { x: x + w / 2, y: y(r.rows) - 4, 'text-anchor': 'middle' }, String(r.rows)));
+      });
+    });
+    box.append(svg);
+  };
+
+  // ---- section 4: methods table ----
+  draws.methodtable = (tbody) => {
+    tbody.replaceChildren();
+    const f = (v, fmt) => (v === null || v === undefined ? '—' : fmt(Number(v)));
+    for (const r of DATA.methods) {
+      const tt = DATA.tally.find((x) => x.source === r.source);
+      const tr = el('tr');
+      const cells = [
+        [r.name, ''],
+        [tt ? `${tt.yes} of ${tt.total}` : '—', 'n'],
+        [f(r.rows, (v) => v.toLocaleString('en-US')), 'n'],
+        [f(r.cost_usd, (v) => '$' + v.toFixed(2)), 'n'],
+        [f(r.cost_per_report, (v) => '$' + v.toFixed(2)), 'n'],
+        [f(r.seconds, (v) => Math.round(v) + ' s'), 'n'],
+        [f(r.page_right_first_time_pct, (v) => v.toFixed(1) + '%'), 'n'],
+        [f(r.verified_pct, (v) => v.toFixed(1) + '%'), 'n'],
+        [f(r.needs_review_pct, (v) => v.toFixed(1) + '%'), 'n'],
+      ];
+      for (const [text, cls] of cells) tr.append(el('td', cls, text));
+      tbody.append(tr);
+    }
+  };
+
+  // ---- section 5: page right first time (horizontal bars) ----
+  draws.pagechart = (box) => {
+    box.replaceChildren();
+    const rows = DATA.page_repairs;
+    const W = Math.max(300, box.clientWidth || 800);
+    const rowH = 34;
+    const H = rows.length * rowH + 24;
+    const svg = svgEl('svg', { width: '100%', viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Share of rows where the model gave the right page, per method' });
+    box.append(svg);
+    const measure = (s) => { const t = svgEl('text', {}, s); svg.append(t); const w = t.getComputedTextLength(); t.remove(); return w || s.length * 7; };
+    const label = (r) => `${r.right_first_time} of ${r.rows_with_page} right (${r.repaired} repaired)`;
+    const labelW = Math.max(...rows.map((r) => measure(NAMES[r.method]))) + 12;
+    const rightW = Math.max(...rows.map((r) => measure(label(r)))) + 10;
+    const x100 = Math.max(labelW + 60, W - rightW);
+    const x = (p) => labelW + (x100 - labelW) * (p / 100);
+    rows.forEach((r, i) => {
+      const yy = i * rowH + 6;
+      const share = r.rows_with_page ? (100 * r.right_first_time) / r.rows_with_page : 0;
+      svg.append(svgEl('text', { x: 0, y: yy + 15 }, NAMES[r.method]));
+      const bg = svgEl('rect', { x: labelW, y: yy + 3, width: x100 - labelW, height: 16, rx: 2 });
+      bg.style.fill = 'var(--cds-chart-grid)';
+      const fg = svgEl('rect', { x: labelW, y: yy + 3, width: Math.max(0, x(share) - labelW), height: 16, rx: 2 });
+      fg.style.fill = COLOR[r.method];
+      svg.append(bg, fg, svgEl('text', { x: x100 + 6, y: yy + 15 }, label(r)));
+    });
+    svg.append(svgEl('text', { x: labelW, y: H - 4 }, '0%'));
+    svg.append(svgEl('text', { x: x100, y: H - 4, 'text-anchor': 'end' }, '100% right first time'));
+  };
+
+  // ---- section 8: every value, with filters ----
+  const filter = { source: '', report: '', search: '' };
+  const redraw = () => { draws.explore(document.querySelector('[data-draw="explore"]')); draws.explorecount(document.querySelector('[data-draw="explorecount"]')); };
+  const filtered = () => {
+    const q = filter.search.trim().toLowerCase();
+    return DATA.all_results.filter((r) => (!filter.source || r.source === filter.source) && (!filter.report || r.report === filter.report)
+      && (!q || (r.indicator || '').toLowerCase().includes(q) || (r.quote || '').toLowerCase().includes(q)));
+  };
+  draws.fsource = (sel) => {
+    sel.replaceChildren(new Option('All sources', ''), ...ORDER.map((s) => new Option(NAMES[s], s)));
+    sel.onchange = () => { filter.source = sel.value; redraw(); };
+  };
+  draws.freport = (sel) => {
+    const reports = [...new Set(DATA.all_results.map((r) => r.report))].sort();
+    sel.replaceChildren(new Option('All reports', ''), ...reports.map((s) => new Option(s, s)));
+    sel.onchange = () => { filter.report = sel.value; redraw(); };
+  };
+  draws.explorecount = (p) => { if (p) p.textContent = `Showing ${filtered().length} of ${DATA.all_results.length} values`; };
+  draws.explore = (tbody) => {
+    if (!tbody) return;
+    tbody.replaceChildren();
+    for (const r of filtered()) {
+      const tr = el('tr');
+      tr.append(el('td', '', NAMES[r.source] || r.source));
+      tr.append(el('td', '', r.report));
+      tr.append(el('td', 'xp-muted', r.where === 'further results (notes)' ? 'notes cell' : (r.where || '')));
+      tr.append(el('td', 'wide', r.indicator || '—'));
+      tr.append(el('td', 'n', r.value || '—'));
+      tr.append(el('td', '', r.unit || ''));
+      const pc = el('td', 'n');
+      if (r.page_repaired === 'True') pc.append(chip(`${r.page} (model said ${r.page_cited})`, 'warn')); else pc.textContent = r.page || '';
+      tr.append(pc);
+      const vc = el('td');
+      if (r.source !== 'R pipeline') vc.append(r.verified === 'True' ? chip('Yes', 'ok') : chip('No', 'bad'));
+      tr.append(vc);
+      tr.append(el('td', 'wide xp-muted', r.quote ? (r.quote.length > 220 ? r.quote.slice(0, 220) + '…' : r.quote) : ''));
+      tbody.append(tr);
+    }
+  };
+  document.querySelectorAll('#f-search').forEach((c) => c.addEventListener('input', () => { filter.search = c.value; redraw(); }));
+
+  const drawAll = () => document.querySelectorAll('[data-draw]').forEach((node) => { const fn = draws[node.dataset.draw]; if (fn) fn(node); });
+  drawAll();
+  let last = window.innerWidth;
+  window.addEventListener('resize', () => {
+    if (Math.abs(window.innerWidth - last) < 40) return;
+    last = window.innerWidth;
+    document.querySelectorAll('[data-draw="countchart"],[data-draw="pagechart"]').forEach((n) => draws[n.dataset.draw](n));
+  });
+})();
+</script>
+</body>
+</html>
