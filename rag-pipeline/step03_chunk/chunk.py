@@ -35,7 +35,7 @@ from pathlib import Path
 
 from paths import CHUNKS, DOC_INDEX, LOGS, PARSED
 
-CHUNKER_VERSION = "0.2"
+CHUNKER_VERSION = "0.3"
 ERROR_LOG = LOGS / "chunk_errors.log"
 
 # Chunk sizes (in tokens) and cleanup thresholds. Command-line flags or run(settings={...}) override these.
@@ -267,6 +267,15 @@ def serialize_row(cells, columns):
     return "; ".join(out)
 
 
+def nearby_text(prev, item):
+    """The latest text from an earlier section, if it sits on the same or the previous page as
+    item. Search context for a table or figure that has no text before it in its own section."""
+    pages = item_pages(item)
+    if not prev or prev[1] is None or not pages:
+        return None
+    return prev[0] if 0 <= pages[0] - prev[1] <= 1 else None
+
+
 # --------------------------------------------------------------------------
 # The chunker
 # --------------------------------------------------------------------------
@@ -384,7 +393,11 @@ class PaperChunker:
                 self.buf_headings.pop()
         self.flush()
         self.pos += 1
-        rows = [r for r in (item.get("rows") or []) if any(_cell(c) for c in r)]
+        all_rows = item.get("rows") or []
+        all_pages = item.get("row_pages") or [None] * len(all_rows)   # older sections.json: no row pages
+        kept = [(r, p) for r, p in zip(all_rows, all_pages) if any(_cell(c) for c in r)]
+        rows = [r for r, _ in kept]
+        row_pages = [p for _, p in kept]
         header_rows = item.get("header") or []
         ncols = max([len(r) for r in header_rows + rows] or [1])
         columns = table_columns(header_rows, ncols)
@@ -418,15 +431,27 @@ class PaperChunker:
                 label.append(f"Table: {title}")
             if len(groups) > 1:
                 label.append(f"(rows {lo}-{hi} of {n_rows})")
-            text = ("\n".join(label) + "\n" if label else "") + head_md + "\n" + "\n".join(row_md[i] for i in g)
-            serialized = "\n".join("Row: " + serialize_row(rows[i], columns) for i in g)
+            # A table that crosses a page break: a "(PDF page N)" marker row where the new page
+            # starts, and each piece gets the pages of its own rows, not the whole table's.
+            body_md, body_rows = [], []
+            for k, i in enumerate(g):
+                if k and row_pages[i] and row_pages[i] != row_pages[g[k - 1]]:
+                    marker = f"(PDF page {row_pages[i]})"
+                    body_md.append(md_row([marker], ncols))
+                    body_rows.append(marker)
+                body_md.append(row_md[i])
+                body_rows.append("Row: " + serialize_row(rows[i], columns))
+            own = [row_pages[i] for i in g if row_pages[i]]
+            piece_pages = [min(own), max(own)] if own else (list(pages) if pages else None)
+            text = ("\n".join(label) + "\n" if label else "") + head_md + "\n" + "\n".join(body_md)
+            serialized = "\n".join(body_rows)
             self.chunks.append({
                 "type": "table",
                 "section_kind": self.cur_kind,
                 "data_section": self.cur_data,
                 "heading_path": list(self.cur_path),
                 "headings": [self.cur_path[-1]] if self.cur_path else [],
-                "pages": list(pages) if pages else None,
+                "pages": piece_pages,
                 "text": text,
                 "table": {"title": title or None, "columns": columns,
                           "row_range": [lo, hi], "n_rows_total": n_rows},
@@ -543,6 +568,7 @@ class PaperChunker:
         classify_sections(sections)      # first: it also strips the TOC from heading paths
         infer_heading_paths(sections)
         running = find_running_headers(sections, self.settings["header_min_pages"])
+        prev_text = None     # (text, last page) of the latest text item, across sections
 
         for s in sections:
             if s.get("_kind") == "toc":
@@ -562,10 +588,12 @@ class PaperChunker:
                         continue
                     self.add_text(text, item_pages(it))
                     last_text = text
-                elif typ == "table":
-                    self.add_table(it, last_text)
-                elif typ == "figure":
-                    self.add_figure(it, last_text)
+                    prev_text = (text, (item_pages(it) or [None, None])[1])
+                elif typ in ("table", "figure"):
+                    context = last_text or nearby_text(prev_text, it)
+                    if context and not last_text:
+                        self.stats["context_from_previous_section"] += 1
+                    (self.add_table if typ == "table" else self.add_figure)(it, context)
                 elif typ == "footnote":
                     pr = item_pages(it)
                     if text and pr:

@@ -542,9 +542,12 @@ def build_and_render_table(doc: dict, chain: list) -> dict:
     Only the FIRST piece is peeled for titles/headers. Continuation pieces are body rows only, because
     Docling wrongly flags their first row as a header (it did for the tables on pages 9 and 10).
     If a continuation repeats the header row at the top of the new page, that repeat is dropped.
+    Each body row's PDF page is kept (row_pages), and the markdown gets a "(PDF page N)" marker row
+    where a new page starts, so a reader can tell which page a row is on, not just "pages 55-56".
     """
     rows, flags = grid(chain[0], doc)
     titles, header, body = peel(rows, flags)
+    row_pages = [chain[0]["prov"][0]["page_no"]] * len(body)
     captions = table_captions(doc, chain)
     titles = captions + [t for t in titles if t not in captions]
     for piece in chain[1:]:
@@ -552,6 +555,7 @@ def build_and_render_table(doc: dict, chain: list) -> dict:
         if header and more and row_line(more[0]) == row_line(header[-1]):
             more = more[1:]
         body.extend(more)
+        row_pages += [piece["prov"][0]["page_no"]] * len(more)
 
     n_cols = chain[0]["data"]["num_cols"]
     header = [fill_spans(h, repeat=True) for h in header]    # the REAL header (maybe none)
@@ -564,7 +568,10 @@ def build_and_render_table(doc: dict, chain: list) -> dict:
     table_lines = [row_line(h) for h in md_header]
     if md_header:
         table_lines.append("|" + "---|" * n_cols)
-    table_lines.extend(row_line(r) for r in body)
+    for i, r in enumerate(body):
+        if i and row_pages[i] != row_pages[i - 1]:
+            table_lines.append(row_line([f"(PDF page {row_pages[i]})"] + [""] * (n_cols - 1)))
+        table_lines.append(row_line(r))
 
     # Blank lines between title / table / footnotes: otherwise a viewer can read a "Footnote: ..."
     # line directly under the table as one more table row.
@@ -583,6 +590,7 @@ def build_and_render_table(doc: dict, chain: list) -> dict:
         "title": " / ".join(titles) or None,
         "header": header,
         "rows": body,
+        "row_pages": row_pages,
         "suspect": suspects,
     }
 
@@ -960,7 +968,8 @@ def typed_item(b: dict) -> dict:
     One entry of a section's `content`. Typed so the chunker never has to guess what a string is:
       {"type": "text",     "text", "pages"}
       {"type": "table",    "title", "header" (list of rows, [] if none), "rows", "text" (rendered markdown),
-                           "pages", and "suspect" (reasons) only if the table looks mis-parsed}
+                           "pages", "row_pages" (PDF page of each row in rows), and "suspect"
+                           (reasons) only if the table looks mis-parsed}
       {"type": "footnote", "text", "page"}
       {"type": "figure",   "caption" (or None), "labels" (text found inside the picture), "image"
                            (path of the PNG crop relative to the paper folder, or None), "text", "pages"}
@@ -973,7 +982,7 @@ def typed_item(b: dict) -> dict:
                 "text": b["text"], "pages": list(b["pages"])}
     if b["kind"] == "table":
         item = {"type": "table", "title": b["title"], "header": b["header"], "rows": b["rows"],
-                "text": b["text"], "pages": list(b["pages"])}
+                "row_pages": b["row_pages"], "text": b["text"], "pages": list(b["pages"])}
         if b["suspect"]:
             item["suspect"] = b["suspect"]
         return item
