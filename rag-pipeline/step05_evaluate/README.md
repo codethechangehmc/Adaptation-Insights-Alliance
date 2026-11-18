@@ -12,7 +12,12 @@ Compares the methods of one step 04 run and, once the answer key is checked, sco
 ```powershell
 python -m step05_evaluate.evaluate --run-id pilot03     # comparison pages, plus scores if the key exists
 python -m step05_evaluate.evaluate --init-review        # create the answer key from Lolita's test set (once)
+python -m step05_evaluate.compare --run-id pilot03      # optional: this run vs the Alliance's R pipeline and the gold answers
 ```
+
+`compare` writes `data/05_eval/<run-id>/compare/` (summary.json, by_report.csv, gold_matches.csv): rows
+delivered, gold values found (same lenient number-match rule for R and for us), verified rate, page right
+first time, rows needing review, and cost per method. It needs no answer-key review.
 
 ## Outputs
 
@@ -46,3 +51,4 @@ data/05_eval/<run-id>/
 - `report.py` - writes the comparison and blind review pages.
 - `scoring.py` - matches extracted facts to reviewed labels (value, metric, unit and scope must all match).
 - `benchmark.py` - creates the unreviewed answer key from the test set.
+- `compare.py` - optional: the run against the R pipeline's output and the gold answers.
