@@ -12,6 +12,10 @@ Cuts each parsed paper into chunks small enough to search and to hand to the mod
 - Splits on headings, then groups text into chunks of about 450 tokens (600 at most).
   The sizes are in `DEFAULT_SETTINGS` at the top of `chunk.py`.
 - Keeps tables whole; a table over 1,500 tokens is split by rows, with the header repeated.
+  A table that crosses a page break gets a `(PDF page N)` marker row, and each piece gets the pages
+  of its own rows.
+- Gives tables and figures a "Context:" line for search (the text just before them; from the
+  previous section if it is on the same or the previous page).
 - Attaches footnotes to the text on their page.
 - Drops the table of contents and running headers.
 - Tags each chunk as body, annex or references.

@@ -1,8 +1,8 @@
 # Reviewed evidence benchmark
 
-`run.py evaluate --init-review` creates `review.json` from the reference tables
-in `test_set/`. It is ignored by git and never overwritten, so back up your
-reviewed copy yourself.
+`python -m step05_evaluate.evaluate --init-review` creates `review.json` (in this
+folder) from Lolita's reference tables in `test_set/` at the top of the repo. It is
+never overwritten, and it is kept in git so the team shares the reviewed answers.
 
 Imported labels are suggestions, not answers. The references contain coded
 categories, alternatives, incomplete result lists and known disagreements.
@@ -60,7 +60,7 @@ Until then they are `needs_review`, not false positives.
 
 ## Blind review
 
-`reports/review.html` hides method names (A, B, C) and shows a token beside
+`data/05_eval/<run-id>/reports/review.html` hides method names (A, B, C) and shows a token beside
 each fact. Do not open `review_key.json` until you finish. Record decisions:
 
 ```json

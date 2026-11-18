@@ -21,7 +21,7 @@ Turns each PDF into clean text, tables and sections, using Docling.
 | `docling.json` | Docling's full output; the source of truth |
 | `raw.md` | Docling's own markdown, untouched (for comparison) |
 | `clean.md` | the cleaned document, readable |
-| `sections.json` | the document split by headings, with pages; step 03 reads this |
+| `sections.json` | the document split by headings, with pages; step 03 reads this. Tables carry each row's PDF page (`row_pages`) |
 | `figures/` | cropped images of charts and diagrams |
 | `meta.json` | run info and cleanup counts; written last, so it marks the paper as done |
 
@@ -50,3 +50,5 @@ in `data/logs/parse_errors.log`.
 - Some tables come out with scrambled or fused cells. These are flagged, not repaired.
 - Bold lead-in sentences are sometimes read as headings. No text is lost.
 - Scanned pages (images, no text) come out empty; there is no OCR.
+- A table split across a page break is joined into one table, with a `(PDF page N)` marker row where
+  the new page starts.

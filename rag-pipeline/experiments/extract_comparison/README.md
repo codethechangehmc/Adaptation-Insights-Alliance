@@ -1,5 +1,10 @@
 ﻿# Extraction experiments
 
+> **Record of the first pilot (2026-11-05).** The code now lives in `step04_extract/` and
+> `step05_evaluate/`, and has changed since: hybrid searches step 03's chunks, the exports are
+> `results.csv` / `projects.csv` / per-report `facts.csv`, and the R comparison is parked here
+> (`evaluation/r_baseline.py`). The commands below are the pilot's and no longer run.
+
 This experiment asks one question: which evidence should the model read when it
 extracts project facts from an evaluation report? It compares three methods on
 the same model, prompts and output schema:
