@@ -407,7 +407,7 @@ def summarize(rows: list[dict]) -> list[dict]:
                 if populated
                 else None,
                 "recorded_citation_verification_rate": sum(
-                    c in ("exact", "normalized", "joined_passages") for c in recorded
+                    c in ("exact", "normalized", "joined_passages", "table_cells") for c in recorded
                 )
                 / len(recorded)
                 if recorded

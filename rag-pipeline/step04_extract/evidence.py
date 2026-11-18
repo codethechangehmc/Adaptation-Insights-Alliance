@@ -56,6 +56,15 @@ def check_quote(evidence: dict, pages: tuple[str, ...]) -> str:
     parts = quote.split(" ... ")
     if len(parts) > 1 and all(len(norm(part)) >= 8 and contains(part, text) for part in parts):
         return "joined_passages"
+    # A table row (cells between "|") rarely matches as one phrase: the PDF's text layer often
+    # reads a table column by column, and Docling may join a value and its date in one cell.
+    # So: the row's label (a cell of 2+ words) must be on the page as a phrase, and every other
+    # cell must be there as a phrase or word by word.
+    cells = [c.strip() for c in quote.split("|") if norm(c)]
+    anchored = any(len(norm(c).split()) >= 2 and contains(c, text) for c in cells)
+    present = all(contains(c, text) or all(contains(p, text) for p in c.split()) for c in cells)
+    if quote.count("|") >= 2 and len(cells) >= 2 and anchored and present:
+        return "table_cells"
     if quote_pages(quote, pages):
         return "found_other_page"
     return "needs_visual_review" if len(norm(text)) < 30 else "not_found_needs_review"

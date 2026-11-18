@@ -22,7 +22,7 @@ import requests
 from step03_chunk.chunk import PaperChunker
 from step04_extract import extract
 from step04_extract.api import BudgetError, Client
-from step04_extract.evidence import pdf_pages, quote_pages
+from step04_extract.evidence import check_quote, pdf_pages, quote_pages
 from step04_extract.exports import export_run
 from step04_extract.files import CONFIG, fingerprint, read_json, write_json
 from step04_extract.inputs import full_text, load_manifest, prepare_document
@@ -30,6 +30,7 @@ from step04_extract.retrieval import embeddings, pack
 from step04_extract.runner import dry_plan, execute, jobs, prepare, start_run
 from step04_extract.tasks import FIELDS, GROUPS, METHODS, RESULT_CONTEXT_FIELDS
 from step04_extract.workbook import export_xlsx
+from step05_evaluate.compare import is_match, numbers
 from step05_evaluate.report import report
 from step05_evaluate.scoring import evaluate
 
@@ -470,6 +471,29 @@ class Workflows(unittest.TestCase):
         old.add_table({k: v for k, v in item.items() if k != "row_pages"}, None)
         self.assertNotIn("(PDF page", old.chunks[0]["text"])  # older sections.json still works
         self.assertEqual(old.chunks[0]["pages"], [55, 56])
+
+    def test_table_row_quotes_and_compare_rules(self) -> None:
+        """A table row quote passes when its label and cells are on the page, even read column by
+        column; compare reads '10 000' as one number and matches Yes/No only with the metric."""
+        table_pdf = self.directory / "table.pdf"
+        with pymupdf.open() as pdf:   # the text layer lists values, then dates, like World Bank ICRs
+            pdf.new_page().insert_text((72, 72), "Technologies generated\nNumber\n0.00\n115.00\n175.00\n"
+                                                 "14-Mar-2013\n14-Mar-2013\n31-Jan-2020")
+            pdf.save(table_pdf)
+        pages = pdf_pages(table_pdf)
+        row = "| Technologies generated | Number | 0.00 14-Mar-2013 | 115.00 14-Mar-2013 |  | 175.00 31-Jan-2020 |"
+        self.assertEqual(check_quote({"quote": row, "pages": [1]}, pages), "table_cells")
+        wrong_label = row.replace("Technologies generated", "Farmers trained daily")
+        self.assertEqual(check_quote({"quote": wrong_label, "pages": [1]}, pages), "not_found_needs_review")
+        self.assertEqual(check_quote({"quote": row.replace("175.00", "999.00"), "pages": [1]}, pages),
+                         "not_found_needs_review")
+
+        self.assertEqual(numbers("nearly ten thousand (10 000)"), {10000.0})
+        self.assertEqual(numbers("in 10 2019 surveys"), {10.0, 2019.0})
+        self.assertEqual(numbers("379,162.00 and >1000"), {379162.0, 1000.0})
+        self.assertTrue(is_match("N", "SLM Knowledge Platform up and running", "N", "SLM Knowledge Platform operational"))
+        self.assertFalse(is_match("N", "SLM Knowledge Platform up and running", "N", "Communication strategy updated"))
+        self.assertTrue(is_match("10000", "farmers who benefited", "10 000", "farm managers"))
 
     def test_budget_and_uncertain_charges_stop_requests(self) -> None:
         """Block overspending and prevent automatic resends after ambiguous timeouts."""

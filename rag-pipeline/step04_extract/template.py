@@ -245,7 +245,7 @@ def review_flags(fact: dict, row: dict, source: dict) -> tuple[list[tuple[str, s
     # doesn't exist, is a problem. A real quote on another page, or one too short to check, is a note.
     checks = source["quote_checks"]
     bad_quotes = [c for c in checks if c in ("not_found_needs_review", "invalid_page")]
-    odd_quotes = [c for c in checks if c not in ("exact", "normalized", "joined_passages") and c not in bad_quotes]
+    odd_quotes = [c for c in checks if c not in ("exact", "normalized", "joined_passages", "table_cells") and c not in bad_quotes]
     problem_checks = [
         (not row["verified"], "not_on_page", "Stated value not found on a cited PDF page"),
         (source["suspect"], "suspect_table", "Matched parser block has suspect-table flags"),

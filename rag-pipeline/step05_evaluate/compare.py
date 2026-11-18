@@ -29,7 +29,10 @@ from pathlib import Path
 
 from paths import EVAL, EXTRACTED, REFERENCE
 
-NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+# "10 000" (groups of three digits split by spaces) is one number; otherwise digits with commas.
+NUMBER_RE = re.compile(r"(?<!\d)\d{1,3}(?:[ \u00a0\u202f]\d{3}(?!\d))+(?:\.\d+)?|\d[\d,]*(?:\.\d+)?")
+STOPWORDS = {"the", "and", "for", "with", "from", "that", "which", "who", "are", "was", "were",
+             "number", "share", "total", "project", "projects", "level", "per", "into", "under"}
 
 
 def numbers(text: str) -> set:
@@ -37,10 +40,28 @@ def numbers(text: str) -> set:
     out = set()
     for match in NUMBER_RE.findall(text or ""):
         try:
-            out.add(float(match.replace(",", "")))
+            out.add(float(re.sub(r"[,\s\u00a0\u202f]", "", match)))
         except ValueError:
             pass
     return out
+
+
+def words(text: str) -> set:
+    return {w for w in re.findall(r"[a-z]{3,}", (text or "").casefold()) if w not in STOPWORDS}
+
+
+def is_match(gold_value: str, gold_metric: str, value: str, metric: str) -> bool:
+    """Does a (value, metric) pair count as finding this gold result?
+
+    A gold value with digits: the same number appears in value. A gold value without digits
+    (Yes, No, N): the same value AND at least two words of the gold metric, otherwise every
+    "N" in a report would count. The same rule is applied to the R pipeline and to us.
+    """
+    wanted = numbers(gold_value)
+    if wanted:
+        return bool(wanted & numbers(value))
+    same = (value or "").strip().casefold() == (gold_value or "").strip().casefold()
+    return same and len(words(gold_metric) & words(metric)) >= 2
 
 
 def read_csv(path: Path) -> list[dict]:
@@ -58,21 +79,22 @@ def write_csv(path: Path, rows: list[dict]) -> None:
 
 
 def r_pipeline(codes: list[str]) -> dict:
-    """The R pipeline's output for these reports: the 3 headline result slots plus location values."""
+    """The R pipeline's output for these reports: its 3 headline result slots plus location values,
+    each as a (value, metric) pair."""
     general = [r for r in read_csv(REFERENCE / "pipeline_general.csv") if r.get("set") == "gold"]
     locations = read_csv(REFERENCE / "pipeline_gold_locations.csv")
     out = {}
     for code in codes:
         row = next((r for r in general if r["project_code"] == code), {})
-        slots = [row.get(f"result{i}", "") for i in (1, 2, 3)]
-        located = [r.get("result_value", "") for r in locations if r["project_code"] == code]
-        values = [v for v in slots + located if v.strip()]
+        slots = [(row.get(f"result{i}", ""), row.get(f"result{i}_metric", "")) for i in (1, 2, 3)]
+        located = [(r.get("result_value", ""), r.get("result_metric") or r.get("result_stated", ""))
+                   for r in locations if r["project_code"] == code]
         out[code] = {
-            "headline_slots": sum(1 for v in slots if v.strip()),
-            "location_values": sum(1 for v in located if v.strip()),
-            "rows": len(values),
-            "numbers": set().union(*(numbers(v) for v in values)) if values else set(),
+            "headline_slots": sum(1 for v, _ in slots if v.strip()),
+            "location_values": sum(1 for v, _ in located if v.strip()),
+            "pairs": [(v, m) for v, m in slots + located if v.strip()],
         }
+        out[code]["rows"] = len(out[code]["pairs"])
     return out
 
 
@@ -100,12 +122,14 @@ def run(run_id: str) -> dict:
     by_report, matches = [], []
     for code in codes:
         gold_here = [g for g in gold if g["project_code"] == code]
-        sources = {"R pipeline": r_out[code]["numbers"]}
+        sources = {"R pipeline": r_out[code]["pairs"]}
         for method in methods:
-            sources[method] = set().union(*(numbers(r["value_stated"]) for r in ours[(code, method)])) \
-                if ours[(code, method)] else set()
-        for name, found_numbers in sources.items():
-            found = sum(1 for g in gold_here if numbers(g["value"]) & found_numbers)
+            sources[method] = [(r["value_stated"], r["metric_stated"]) for r in ours[(code, method)]]
+        for name, pairs in sources.items():
+            found = sum(
+                1 for g in gold_here
+                if any(is_match(g["value"], g["metric_stated"], v, m) for v, m in pairs)
+            )
             by_report.append({
                 "report": code,
                 "source": name,
@@ -115,9 +139,11 @@ def run(run_id: str) -> dict:
             })
         for g in gold_here:
             line = {"report": code, "gold_value": g["value"], "gold_metric": g["metric_stated"],
-                    "gold_page": g.get("page", ""), "R pipeline": bool(numbers(g["value"]) & sources["R pipeline"])}
+                    "gold_page": g.get("page", ""),
+                    "R pipeline": any(is_match(g["value"], g["metric_stated"], v, m) for v, m in sources["R pipeline"])}
             for method in methods:
-                hit = next((r for r in ours[(code, method)] if numbers(g["value"]) & numbers(r["value_stated"])), None)
+                hit = next((r for r in ours[(code, method)]
+                            if is_match(g["value"], g["metric_stated"], r["value_stated"], r["metric_stated"])), None)
                 line[method] = bool(hit)
                 line[f"{method}_page"] = hit["page"] if hit else ""
                 line[f"{method}_metric"] = hit["metric_stated"] if hit else ""
@@ -166,7 +192,8 @@ def run(run_id: str) -> dict:
         "by_report": by_report,
         "notes": [
             "gold_found: a gold value counts as found if the same number appears among that source's "
-            "results for the report. Same rule for R and for us; numbers only, not the indicator.",
+            "results for the report (for Yes/No values: the same value and at least two words of the "
+            "gold metric). Same rule for R and for us; it does not check the indicator itself.",
             "R rows = its 3 headline result slots plus values in its location sheet.",
             "verified: the value is printed on the page given. page right first time: the model's own "
             "page was correct (not repaired).",
