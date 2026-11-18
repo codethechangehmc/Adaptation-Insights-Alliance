@@ -12,7 +12,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.worksheet import Worksheet
 
-from step04_extract.files import CONFIG, file_hash, read_json, write_json
+from step04_extract.files import CONFIG
 from step04_extract.template import PROJECT_COLUMNS, RESULT_COLUMNS, SCHEMA
 
 
@@ -146,13 +146,9 @@ def project_sheet(book: Workbook, projects: list[dict]) -> None:
     sheet.sheet_view.showGridLines = False
 
 
-def export_xlsx(run_dir: Path) -> Path:
-    """Fill a copy of the template and verify every saved result/project cell on reopening."""
+def export_xlsx(run_dir: Path, rows: list[dict], projects: list[dict]) -> Path:
+    """Fill a copy of the results template (exports/results.xlsx) and check every saved cell."""
     output = run_dir / "exports"
-    rows, projects = (
-        read_json(output / "template_results.json"),
-        read_json(output / "projects.json"),
-    )
     book = load_workbook(CONFIG / "results_template.xlsx")
     result_sheet(book["results"], rows)
     project_sheet(book, projects)
@@ -168,7 +164,7 @@ def export_xlsx(run_dir: Path) -> Path:
     }
     for cell, value in updates.items():
         spec[cell] = value
-    target = output / "extraction_results.xlsx"
+    target = output / "results.xlsx"
     book.save(target)
     book.close()
 
@@ -189,19 +185,4 @@ def export_xlsx(run_dir: Path) -> Path:
                         f"Workbook round-trip mismatch at {name}!{get_column_letter(column)}{index}"
                     )
     saved.close()
-    write_json(
-        output / "workbook_metadata.json",
-        {
-            "writer": "openpyxl",
-            "exporter_sha256": file_hash(Path(__file__)),
-            "template_sha256": file_hash(CONFIG / "results_template.xlsx"),
-            "data_hashes": {
-                name: file_hash(output / name)
-                for name in ("template_results.json", "projects.json")
-            },
-            "result_rows": len(rows),
-            "project_rows": len(projects),
-            "all_saved_cells_verified": True,
-        },
-    )
     return target

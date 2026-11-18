@@ -1,11 +1,11 @@
-"""Export every method at the same raw Session-1 stage, keeping all facts and evidence."""
+"""Write a run's tables: checked results, project fields and the raw facts, per report and combined."""
 
 from collections import defaultdict
 from pathlib import Path
 
-from step04_extract.files import read_json, write_csv, write_json
-from step04_extract.rules import headline
-from step04_extract.tasks import GROUPS, RESULT_CONTEXT_FIELDS
+from step04_extract.files import read_json, write_csv
+from step04_extract.tasks import GROUPS
+from step04_extract.template import export_template
 
 ARRAY_FIELDS = {"countries", "funder_names", "implementor_names"}
 PAGE_NAMES = {
@@ -55,111 +55,66 @@ def flatten_fields(row: dict, facts: list[dict]) -> None:
             row[field + "_stated"] = row[field + "_quote"]
 
 
-def result_row(fact: dict, metadata: dict, index: int) -> dict:
-    """Use R's metric_stated/unit_stated names while preserving the full result record."""
-    evidence = evidence_columns([fact])
-    return {
-        **metadata,
-        "result_index": index,
-        "value": fact["value"],
-        **{name: fact.get(name, "") for name in RESULT_CONTEXT_FIELDS},
-        "metric_stated": fact["metric"],
-        "unit_stated": fact["unit"],
-        "scope": fact["scope"],
-        "value_type": fact["value_type"],
-        "category": fact["category"],
-        "project_total": fact["project_total"],
-        "in_summary": fact["in_summary"],
-        "indicator_level": fact["indicator_level"],
-        "status": fact["achievement_status"],
-        "extraction_status": fact["status"],
-        "page": evidence["page"],
-        "pages": evidence["pages"],
-        "evidence": evidence["evidence"],
+def fact_row(fact: dict, job: dict, index: int) -> dict:
+    """One raw fact exactly as the model returned it, with its evidence in two readable columns."""
+    evidence = fact.get("evidence", [])
+    row = {
+        "project_code": job["document"],
+        "method": job["method"],
+        "trial": job["trial"],
+        "task": job["group"],
+        "fact": index,
     }
-
-
-def fill_slots(row: dict, facts: list[dict]) -> None:
-    """Create the same optional headline view for every method, independent of raw scoring."""
-    top = headline(facts)
-    for slot in range(1, 4):
-        prefix = f"result{slot}"
-        fact = top[slot - 1] if slot <= len(top) else None
-        row[prefix] = fact["value"] if fact else ""
-        for field, source in [
-            ("metric_stated", "metric"),
-            ("unit_stated", "unit"),
-            ("scope", "scope"),
-        ]:
-            row[prefix + "_" + field] = fact[source] if fact else ""
-        evidence = evidence_columns([fact] if fact else [])
-        row[prefix + "_page"] = evidence["page"]
-        row[prefix + "_evidence"] = evidence["evidence"]
+    row.update({key: value for key, value in fact.items() if key != "evidence"})
+    row["pages"] = "; ".join(dict.fromkeys(str(p) for e in evidence for p in e["pages"]))
+    row["quotes"] = " | ".join(e["quote"] for e in evidence if e["quote"])
+    return row
 
 
 def export_run(run_dir: Path) -> dict:
-    """Write flat Session-1 rows and lossless facts/results tables for review and adapters."""
+    """Write exports/: results.csv and projects.csv for every report, plus one folder per
+    report with its results, projects and facts (every raw fact the model returned).
+
+    Returns the rows: {"results": [...], "projects": [...], "facts": [...]}.
+    """
     run = read_json(run_dir / "run.json")
-    wide, long, results = {}, [], []
+    projects, facts, papers = {}, defaultdict(list), {}
     for job in run["jobs"]:
-        key = (job["method"], job["document"], job["trial"])
-        metadata = {
-            "method": job["method"],
-            "project_code_hint": job["document"],
-            "trial": job["trial"],
-            "stage": "session1_raw",
-        }
-        if key not in wide:
+        if job["document"] not in papers:
             document = read_json(run_dir / "prepared" / f"{job['document']}.json")
-            wide[key] = {
-                **metadata,
-                "document": Path(document["pdf"]).name,
-                "model": run.get("baselines", {})
-                .get(job["method"], {})
-                .get("model", run["config"]["model"]),
+            papers[job["document"]] = Path(document["pdf"])
+        key = (job["method"], job["document"], job["trial"])
+        if key not in projects:
+            projects[key] = {
+                "method": job["method"],
+                "project_code_hint": job["document"],
+                "trial": job["trial"],
+                "document": papers[job["document"]].name,
+                "model": run["config"]["model"],
                 **{group + "_status": "not_scheduled" for group in GROUPS},
             }
-        row = wide[key]
+        row = projects[key]
         path = run_dir / job["path"] / "result.json"
         result = read_json(path) if path.exists() else {"status": "not_run"}
         row[job["group"] + "_status"] = result["status"]
         if result["status"] != "completed":
             continue
         answer = result["answer"]
-        facts = answer["facts"]
-        flatten_fields(row, facts)
+        flatten_fields(row, answer["facts"])
         row[job["group"] + "_notes"] = answer["notes"]
-        row[job["group"] + "_pages"] = evidence_columns(facts)["pages"]
-        long.extend(
-            {**metadata, "group": job["group"], "fact_index": i, **fact}
-            for i, fact in enumerate(facts, 1)
+        facts[job["document"]].extend(
+            fact_row(fact, job, index) for index, fact in enumerate(answer["facts"], 1)
         )
-        if job["group"] == "results":
-            results.extend(result_row(fact, metadata, i) for i, fact in enumerate(facts, 1))
-            fill_slots(row, facts)
-            row["result_notes"] = answer["notes"]
-            row["results_all_n"] = len(facts)
-    output = run_dir / "exports"
-    tables = {"session1": list(wide.values()), "facts": long, "results": results}
-    for name, rows in tables.items():
-        columns = list(dict.fromkeys(key for row in rows for key in row))
-        write_csv(output / f"{name}.csv", rows, columns or ["stage"])
-        write_json(output / f"{name}.json", rows)
-    # Template exports are a separate presentation layer over the unchanged raw tables.
-    from step04_extract.template import export_template
 
-    export_template(run_dir, list(wide.values()))
-    write_json(
-        output / "format.json",
-        {
-            "stage": "session1_raw",
-            "harmonized": False,
-            "notes": [
-                "All methods use the same field mapping and headline selector.",
-                "Metric/unit _stated columns contain document wording, not controlled codes.",
-                "Use the common reviewed scorer; do not compare different scorer percentages.",
-                "Original model replies and all facts remain in per-job files.",
-            ],
-        },
-    )
-    return {name: len(rows) for name, rows in tables.items()}
+    # Checked results and project fields, in our template's columns (template.py).
+    results, project_rows = export_template(run_dir, list(projects.values()))
+
+    # Raw facts, one file per report.
+    for doc_id, rows in facts.items():
+        columns = list(dict.fromkeys(key for row in rows for key in row))
+        write_csv(run_dir / "exports" / papers[doc_id].stem / "facts.csv", rows, columns)
+    return {
+        "results": results,
+        "projects": project_rows,
+        "facts": [row for rows in facts.values() for row in rows],
+    }

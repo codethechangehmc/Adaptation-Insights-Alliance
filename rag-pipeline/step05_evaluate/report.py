@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 from urllib.parse import quote
 
-from step04_extract.exports import export_run
 from step04_extract.files import fingerprint, read_json, write_json
 from step04_extract.evidence import prediction_id
 
@@ -66,7 +65,6 @@ def cell(job: dict | None, run_dir: Path, output: Path, review_map: dict) -> str
 def report(run_dir: Path, out_dir: Path) -> list[Path]:
     """Write the comparison page and the blind review page for every job (into out_dir/reports)."""
     run = read_json(run_dir / "run.json")
-    export_run(run_dir)
     directory = out_dir / "reports"
     directory.mkdir(parents=True, exist_ok=True)
     methods = sorted(
@@ -106,7 +104,7 @@ def report(run_dir: Path, out_dir: Path) -> list[Path]:
                 f"<p>Recorded charges plus unresolved reservations: US${cost:.4f}. "
                 "<a href='review.html'>Open blinded review</a></p>"
             )
-            summary_path = run_dir / "evaluation" / "summary.json"
+            summary_path = out_dir / "scores" / "summary.json"
             if summary_path.exists():
                 parts.append(
                     f"<details><summary>Evaluation summary</summary><pre>{escape(summary_path.read_text(encoding='utf-8'))}</pre></details>"

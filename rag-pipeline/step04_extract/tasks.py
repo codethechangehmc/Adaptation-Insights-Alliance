@@ -1,6 +1,6 @@
 """The same five tasks and strict response schemas for every evidence method."""
 
-VERSION = "extract-v3-template"
+VERSION = "extract-v4-labelled"
 RESULT_CONTEXT_FIELDS = {
     "value_stated": "Actual value exactly as printed, preserving commas, signs, ~, > and %.",
     "baseline_stated": "Baseline for this same indicator, unit and scope, or empty.",
@@ -75,19 +75,27 @@ RESULT_RULES = """Find ALL actual quantitative results, including zero, failed i
 partial achievement and negative changes. Include the whole-project beneficiary total
 where stated, plus separately scoped subgroup and country values. Read actual-achieved
 columns, never baseline, original/revised target or percent of target achieved.
-Exclude evaluation sample sizes, dates, durations, ratings, money/disbursement, context
-statistics, questionnaire items and administrative process counts. Survey findings can
-be outcomes when they actually measure an intervention effect; sample sizes are not.
+Exclude evaluation sample sizes, dates, durations, ratings and money/disbursement.
+Include every quantitative indicator from the results framework or indicator tables,
+including activity counts with a target (days of patrols, inspections, meetings held):
+record what kind of result it is in indicator_level (process for activities carried out,
+output for what they directly produced) instead of leaving it out.
+Also include context figures, labelled value_type=context: numbers that describe the
+situation or the people surveyed rather than a change the project caused (e.g. share of
+income spent on risks, crop losses before the project). Survey findings that measure an
+intervention effect are achieved results; sample sizes are never results.
 Coverage alone is geography, not an achievement. Exclude other projects' results.
 Use metric and unit wording from the document. Do not count narrative/table repetitions
-twice. Report Y/N milestones only as non-quantitative caveats in notes.
+twice. Include yes/no milestones from the results framework as results labelled
+value_type=milestone, with value_stated exactly as printed (Yes, No, Y, N, Achieved...).
 Set in_summary=yes when also reported in the executive summary, efficacy narrative
 or outcome-rating justification; no if only in the framework, unknown if unclear.
 If narrative and table conflict, prefer the actual-achieved framework value and
 record the alternative and both supporting passages in notes.
 For every result include value_stated, baseline_stated, target_stated, reporting_year,
 location_stated, beneficiary_stated and intervention_stated. Use an empty string
-for missing context. Baseline and target are context, never additional actual results.
+for missing context. Baselines and targets belong in baseline_stated/target_stated of
+their indicator, never as separate results.
 Keep baseline/target attached to the same indicator, population, unit and location.
 Cite the headers and context supporting these fields as well as the actual value.
 Do not infer an intervention, beneficiary, location or year from nearby unrelated text.
@@ -110,6 +118,10 @@ and cofinanciers. Prefer financing-table USD amounts to SDR values printed on th
 background, effectiveness/findings and finance sections. Distinguish project delivery
 from the evaluation's own fieldwork. An evaluator/consultant is not automatically
 the project lead. Missing dates and finance are valid empty answers.
+Survey figures that describe respondents' circumstances (income shares, losses,
+attitudes, how many trainings they attended) are value_type=context; only figures that
+measure a change the project caused are achieved. A report with no achieved results
+is a valid answer.
 """,
 }
 
@@ -164,7 +176,15 @@ def response_schema(group: str) -> dict:
                 "unit": string,
                 "value_type": {
                     "type": "string",
-                    "enum": ["achieved", "target", "baseline", "planned", "estimate", "context"],
+                    "enum": [
+                        "achieved",
+                        "target",
+                        "baseline",
+                        "planned",
+                        "estimate",
+                        "context",
+                        "milestone",
+                    ],
                 },
                 "category": {
                     "type": "string",

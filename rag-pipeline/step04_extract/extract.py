@@ -23,7 +23,8 @@ from rag-pipeline/.env (a line OPENAI_API_KEY=...; .env is gitignored).
 Outputs (data/04_extracted/<run-id>/):
     run.json            the frozen settings, inputs and code fingerprints of the run
     t01/<method>/<report>/<task>/   evidence sent, request, raw reply and checked result for each job
-    exports/            template_results.csv (our 25 columns), projects.csv, facts.csv, ...
+    exports/            results.csv (checked results), projects.csv (project fields), every report
+    exports/<paper_id>/ the same two files for one report, plus facts.csv (everything the model said)
     ledger.json         every API call with its cost
 
 From Python (this is what run.py does):
@@ -55,6 +56,14 @@ def run_folder(run_id):
     return EXTRACTED / run_id
 
 
+def write_exports(output, xlsx):
+    """Write the run's tables (exports.py) and, if asked, the filled results workbook."""
+    tables = export_run(output)
+    print(", ".join(f"{len(rows)} {name} rows" for name, rows in tables.items()), "->", output / "exports")
+    if xlsx:
+        print(export_xlsx(output, tables["results"], tables["projects"]))
+
+
 def run(documents=None, methods=METHODS, groups=GROUPS, repeats=1, run_id="", execute=False,
         resume=False, max_cost_usd=None, xlsx=False, export_only=False):
     """Preview (the default) or run extraction. Returns the run folder, or None for a preview.
@@ -65,9 +74,7 @@ def run(documents=None, methods=METHODS, groups=GROUPS, repeats=1, run_id="", ex
         if not run_id:
             raise ValueError("--export-only needs --run-id.")
         output = run_folder(run_id)
-        print(export_run(output))
-        if xlsx:
-            print(export_xlsx(output))
+        write_exports(output, xlsx)
         return output
 
     methods, groups = list(methods), list(groups)
@@ -99,9 +106,7 @@ def run(documents=None, methods=METHODS, groups=GROUPS, repeats=1, run_id="", ex
     success = runner.execute(planned, prepared, config, client, output, CACHE)
 
     # 3. Write the tables. Free.
-    print(export_run(output))
-    if xlsx:
-        print(export_xlsx(output))
+    write_exports(output, xlsx)
     print(f"Run {run_id}: " + ("all jobs completed." if success else "some jobs failed; see the run folder."))
     print(f"Next: python -m step05_evaluate.evaluate --run-id {run_id}")
     return output
