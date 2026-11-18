@@ -3,7 +3,8 @@ compare.py - step 05 (optional): how a step 04 run compares with the Alliance's 
 with Lolita's hand-made gold answers, for the reports in the run. No API calls, no cost.
 
 The questions it answers, per report and per method:
-    How much output?   result rows delivered (R: its result1-3 slots plus location-sheet values)
+    How much output?   result rows delivered (R: its result1-3 slots, the "further results" listed in
+                       its result_notes column, and its location-sheet values)
     How many of the gold results were found?   "gold recall": a gold value counts as found if the
                        same number appears among that source's results for that report. The same
                        lenient rule is used for R and for us, so the comparison is fair, but it
@@ -64,6 +65,37 @@ def is_match(gold_value: str, gold_metric: str, value: str, metric: str) -> bool
     return same and len(words(gold_metric) & words(metric)) >= 2
 
 
+# Each "further results" entry in R's result_notes ends with its page: "... (Regional (all crops), p39)".
+NOTE_END = re.compile(r"p\d+(?:[-\u2013,]\s?\d+)*\)\s*$")
+
+
+def note_results(notes: str) -> list[tuple[str, str]]:
+    """The R pipeline's "further results" from its result_notes text, as (value, entry) pairs.
+
+    'further results: 175 Technologies generated (Regional (all crops), p39); 37 Female ...'
+    -> [('175', '175 Technologies generated (Regional (all crops), p39)'), ('37', ...)]
+    Entries are split on ';' but only where an entry is complete (ends with its page), because some
+    entries contain ';' themselves. The value is the first number in the entry, so 'nearly 1 million'
+    reads as 1: fine for the gold reports, a known gap for a few holdout entries.
+    """
+    if "further results:" not in (notes or ""):
+        return []
+    text = notes.split("further results:", 1)[1].split(" | ", 1)[0]   # ' | ' starts the next note
+    entries, current = [], ""
+    for piece in text.split(";"):
+        current = f"{current};{piece}" if current else piece
+        if NOTE_END.search(current):
+            entries.append(current.strip())
+            current = ""
+    if current.strip():
+        entries.append(current.strip())
+    pairs = []
+    for entry in entries:
+        first = NUMBER_RE.search(entry)
+        pairs.append((first.group(0) if first else "", entry))
+    return pairs
+
+
 def read_csv(path: Path) -> list[dict]:
     with open(path, encoding="utf-8-sig", newline="") as stream:
         return list(csv.DictReader(stream))
@@ -79,20 +111,25 @@ def write_csv(path: Path, rows: list[dict]) -> None:
 
 
 def r_pipeline(codes: list[str]) -> dict:
-    """The R pipeline's output for these reports: its 3 headline result slots plus location values,
-    each as a (value, metric) pair."""
+    """The R pipeline's output for these reports, each result as a (value, metric, where) triple.
+
+    where is "result1-3" (its 3 headline slots), "notes" (the further results in result_notes) or
+    "location sheet" (pipeline_gold_locations.csv). All three count as its output.
+    """
     general = [r for r in read_csv(REFERENCE / "pipeline_general.csv") if r.get("set") == "gold"]
     locations = read_csv(REFERENCE / "pipeline_gold_locations.csv")
     out = {}
     for code in codes:
         row = next((r for r in general if r["project_code"] == code), {})
-        slots = [(row.get(f"result{i}", ""), row.get(f"result{i}_metric", "")) for i in (1, 2, 3)]
-        located = [(r.get("result_value", ""), r.get("result_metric") or r.get("result_stated", ""))
+        slots = [(row.get(f"result{i}", ""), row.get(f"result{i}_metric", ""), "result1-3") for i in (1, 2, 3)]
+        noted = [(v, entry, "notes") for v, entry in note_results(row.get("result_notes", ""))]
+        located = [(r.get("result_value", ""), r.get("result_metric") or r.get("result_stated", ""), "location sheet")
                    for r in locations if r["project_code"] == code]
         out[code] = {
-            "headline_slots": sum(1 for v, _ in slots if v.strip()),
-            "location_values": sum(1 for v, _ in located if v.strip()),
-            "pairs": [(v, m) for v, m in slots + located if v.strip()],
+            "headline_slots": sum(1 for v, _, _ in slots if v.strip()),
+            "note_values": sum(1 for v, _, _ in noted if v.strip()),
+            "location_values": sum(1 for v, _, _ in located if v.strip()),
+            "pairs": [p for p in slots + noted + located if p[0].strip()],
         }
         out[code]["rows"] = len(out[code]["pairs"])
     return out
@@ -122,7 +159,7 @@ def run(run_id: str) -> dict:
     by_report, matches = [], []
     for code in codes:
         gold_here = [g for g in gold if g["project_code"] == code]
-        sources = {"R pipeline": r_out[code]["pairs"]}
+        sources = {"R pipeline": [(v, m) for v, m, _ in r_out[code]["pairs"]]}
         for method in methods:
             sources[method] = [(r["value_stated"], r["metric_stated"]) for r in ours[(code, method)]]
         for name, pairs in sources.items():
@@ -138,9 +175,12 @@ def run(run_id: str) -> dict:
                 "gold_found": found,
             })
         for g in gold_here:
+            r_hits = [(m, where) for v, m, where in r_out[code]["pairs"] if is_match(g["value"], g["metric_stated"], v, m)]
             line = {"report": code, "gold_value": g["value"], "gold_metric": g["metric_stated"],
                     "gold_page": g.get("page", ""),
-                    "R pipeline": any(is_match(g["value"], g["metric_stated"], v, m) for v, m in sources["R pipeline"])}
+                    "R pipeline": bool(r_hits),
+                    "R pipeline_where": " + ".join(dict.fromkeys(where for _, where in r_hits)),
+                    "R pipeline_metric": r_hits[0][0] if r_hits else ""}
             for method in methods:
                 hit = next((r for r in ours[(code, method)]
                             if is_match(g["value"], g["metric_stated"], r["value_stated"], r["metric_stated"])), None)
@@ -181,6 +221,8 @@ def run(run_id: str) -> dict:
     r_total = {
         "rows": sum(v["rows"] for v in r_out.values()),
         "headline_slots": sum(v["headline_slots"] for v in r_out.values()),
+        "note_values": sum(v["note_values"] for v in r_out.values()),
+        "location_values": sum(v["location_values"] for v in r_out.values()),
         "gold_found": sum(b["gold_found"] for b in by_report if b["source"] == "R pipeline"),
         "gold_results": len(gold),
     }
@@ -194,7 +236,8 @@ def run(run_id: str) -> dict:
             "gold_found: a gold value counts as found if the same number appears among that source's "
             "results for the report (for Yes/No values: the same value and at least two words of the "
             "gold metric). Same rule for R and for us; it does not check the indicator itself.",
-            "R rows = its 3 headline result slots plus values in its location sheet.",
+            "R rows = its 3 headline result slots, the further results listed in its result_notes "
+            "column, and the values in its location sheet.",
             "verified: the value is printed on the page given. page right first time: the model's own "
             "page was correct (not repaired).",
         ],

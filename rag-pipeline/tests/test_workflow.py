@@ -30,7 +30,7 @@ from step04_extract.retrieval import embeddings, pack
 from step04_extract.runner import dry_plan, execute, jobs, prepare, start_run
 from step04_extract.tasks import FIELDS, GROUPS, METHODS, RESULT_CONTEXT_FIELDS
 from step04_extract.workbook import export_xlsx
-from step05_evaluate.compare import is_match, numbers
+from step05_evaluate.compare import is_match, note_results, numbers
 from step05_evaluate.report import report
 from step05_evaluate.scoring import evaluate
 
@@ -494,6 +494,12 @@ class Workflows(unittest.TestCase):
         self.assertTrue(is_match("N", "SLM Knowledge Platform up and running", "N", "SLM Knowledge Platform operational"))
         self.assertFalse(is_match("N", "SLM Knowledge Platform up and running", "N", "Communication strategy updated"))
         self.assertTrue(is_match("10000", "farmers who benefited", "10 000", "farm managers"))
+
+        notes = ("Document notes: target revised. | further results: 175 Technologies generated "
+                 "(Regional (all crops), p39); 35; 26; 44 contracts by type (breakdown; goods, p12); "
+                 "nearly 3,000 km of roads (rural, p8) | funding_mechanism_portion recoded")
+        self.assertEqual([v for v, _ in note_results(notes)], ["175", "35", "3,000"])
+        self.assertEqual(note_results("no further results here"), [])
 
     def test_budget_and_uncertain_charges_stop_requests(self) -> None:
         """Block overspending and prevent automatic resends after ambiguous timeouts."""
