@@ -1,13 +1,14 @@
 """Small local BM25/vector search with frozen queries and transparent RRF."""
 
 import math
+import os
 import re
 from collections import Counter
 from pathlib import Path
 
 import numpy as np
 
-from step04_extract.files import fingerprint, read_json, tokens, write_json
+from step04_extract.files import fingerprint, tokens
 from step04_extract.inputs import render_block
 
 QUERIES = {
@@ -64,14 +65,29 @@ def ranking(scores: np.ndarray, positive_only: bool = False) -> list[int]:
     ]
 
 
-def embeddings(texts: list[str], client: object, cache: Path, config: dict) -> np.ndarray:
-    """Embed uncached inputs in small batches and reuse vectors across trials."""
+def save_vectors(path: Path, vectors: dict) -> None:
+    """Write a report's vectors to its .npz file, replacing the old file only once fully written."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    with open(temporary, "wb") as stream:
+        np.savez(stream, keys=np.array(list(vectors)), vectors=np.stack(list(vectors.values())))
+    os.replace(temporary, path)
+
+
+def embeddings(texts: list[str], client: object, path: Path, config: dict) -> np.ndarray:
+    """Embed texts, reusing the vectors saved in this report's cache file.
+
+    The cache is one .npz file per report with two arrays: keys (a fingerprint of the embedding
+    model, the dimensions and the text) and vectors. Only texts with no saved vector are sent,
+    32 at a time, and the file is rewritten after every batch, so an interrupted run never pays
+    for the same vector twice. Changed text, model or dimensions give a new key: never a stale vector.
+    """
     keys = [fingerprint([config["embedding_model"], config["dimensions"], t]) for t in texts]
     vectors = {}
-    for key in set(keys):
-        path = cache / "embeddings" / f"{key}.json"
-        if path.exists():
-            vectors[key] = read_json(path)
+    if path.exists():
+        with np.load(path) as saved:
+            if saved["vectors"].ndim == 2 and saved["vectors"].shape[1] == config["dimensions"]:
+                vectors = dict(zip(saved["keys"].tolist(), saved["vectors"]))
     missing = list(dict.fromkeys(k for k in keys if k not in vectors))
     lookup = dict(zip(keys, texts, strict=True))
     for start in range(0, len(missing), 32):
@@ -80,8 +96,8 @@ def embeddings(texts: list[str], client: object, cache: Path, config: dict) -> n
         if len(values) != len(batch):
             raise ValueError("Embedding API returned the wrong number of vectors.")
         for key, value in zip(batch, values, strict=True):
-            vectors[key] = value
-            write_json(cache / "embeddings" / f"{key}.json", value)
+            vectors[key] = np.asarray(value, dtype=np.float32)
+        save_vectors(path, vectors)
     matrix = np.array([vectors[key] for key in keys], dtype=float)
     if matrix.shape != (len(texts), config["dimensions"]) or not np.isfinite(matrix).all():
         raise ValueError("Embedding dimensions or numeric values are invalid; rebuild this cache.")
@@ -98,7 +114,7 @@ def retrieve(document: dict, group: str, client: object, cache: Path, config: di
     queries = [
         q + (" " + document["focus"] if document.get("focus") else "") for q in QUERIES[group]
     ]
-    matrix = embeddings(texts + queries, client, cache, config)
+    matrix = embeddings(texts + queries, client, cache / "embeddings" / f"{document['id']}.npz", config)
     vectors, query_vectors = matrix[: len(texts)], matrix[len(texts) :]
     fused = Counter()
     channel_scores = {"bm25": Counter(), "embedding": Counter()}
