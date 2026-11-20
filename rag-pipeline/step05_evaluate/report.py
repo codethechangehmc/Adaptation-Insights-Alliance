@@ -5,8 +5,8 @@ import os
 from pathlib import Path
 from urllib.parse import quote
 
-from step04_extract.files import fingerprint, read_json, write_json
 from step04_extract.evidence import prediction_id
+from step04_extract.files import fingerprint, read_json, write_json
 
 STYLE = """body{font:15px system-ui;margin:2rem;color:#182337;background:#f7f8fa}
 table{border-collapse:collapse;width:100%;table-layout:fixed;background:white;margin-bottom:2rem}

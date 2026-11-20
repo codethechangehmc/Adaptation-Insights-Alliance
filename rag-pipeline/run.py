@@ -13,6 +13,7 @@ Every step skips work that is already done, so rerunning is cheap. Step 04 spend
 with --execute. To redo finished work or change a step's settings, run that step on its own,
 e.g. python -m step03_chunk.chunk --force. See each step folder's README.
 """
+
 import argparse
 from datetime import datetime, timezone
 
@@ -20,7 +21,8 @@ from paths import EXTRACTED
 
 
 def step02(only, check, execute, run_id):
-    from step02_parse import parse, review      # imported here so later steps never load Docling
+    from step02_parse import parse, review  # imported here so later steps never load Docling
+
     parse.run(only=only)
     if check:
         review.run(only=only)
@@ -28,20 +30,25 @@ def step02(only, check, execute, run_id):
 
 def step03(only, check, execute, run_id):
     from step03_chunk import check_chunks, chunk
+
     chunk.run(only=only)
     if check:
-        check_chunks.run()                      # checks every gold project; takes a few seconds
+        check_chunks.run()  # checks every gold project; takes a few seconds
 
 
 def step04(only, check, execute, run_id):
     from step04_extract import extract
+
     extract.run(documents=only, execute=execute, run_id=run_id)
 
 
 def step05(only, check, execute, run_id):
     from step05_evaluate import evaluate
+
     if not run_id or not (EXTRACTED / run_id / "run.json").exists():
-        print("skipped: no step 04 run to evaluate (use --execute, or --run-id of an existing run)")
+        print(
+            "skipped: no step 04 run to evaluate (use --execute, or --run-id of an existing run)"
+        )
         return
     evaluate.run(run_id=run_id)
 
@@ -66,7 +73,9 @@ def run(start="02", end="05", only=None, check=False, execute=False, run_id=""):
 
 def main():
     ap = argparse.ArgumentParser(description="Run the pipeline steps in order.")
-    ap.add_argument("--from", dest="start", choices=list(STEPS), default="02", help="first step to run")
+    ap.add_argument(
+        "--from", dest="start", choices=list(STEPS), default="02", help="first step to run"
+    )
     ap.add_argument("--to", dest="end", choices=list(STEPS), default="05", help="last step to run")
     ap.add_argument("--only", nargs="+", metavar="PAPER_ID", help="only these papers (file stems)")
     ap.add_argument("--check", action="store_true", help="run each step's quick check after it")
@@ -76,10 +85,16 @@ def main():
     if args.start > args.end:
         ap.error("--from must come before --to")
     try:
-        run(start=args.start, end=args.end, only=args.only, check=args.check,
-            execute=args.execute, run_id=args.run_id)
+        run(
+            start=args.start,
+            end=args.end,
+            only=args.only,
+            check=args.check,
+            execute=args.execute,
+            run_id=args.run_id,
+        )
     except (ValueError, OSError) as error:
-        raise SystemExit(f"Error: {error}")
+        raise SystemExit(f"Error: {error}") from error
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ All cleanup logic (text cleaning, tables, sections) lives in postprocess.py. Thi
 runs Docling and saves files, so you can tweak the cleanup and rerun with --reprocess
 without paying the 10+ minute parse again.
 """
+
 import argparse
 import json
 import logging
@@ -32,7 +33,6 @@ from pathlib import Path
 
 from paths import LOGS, PARSED, RAW
 from step02_parse import postprocess
-
 
 # --------------------------------------------------------------------------
 # 4. Docling + per-paper driver
@@ -51,11 +51,16 @@ def get_converter():
         from docling.datamodel.base_models import InputFormat
         from docling.datamodel.pipeline_options import HeadingHierarchyOptions, PdfPipelineOptions
         from docling.document_converter import DocumentConverter, PdfFormatOption
+
         opts = PdfPipelineOptions(
-            generate_parsed_pages=True,        # style-based levels need the parsed cells (font size/weight)
-            heading_hierarchy_options=HeadingHierarchyOptions(enabled=True),   # bookmarks -> numbering -> font style
+            generate_parsed_pages=True,  # style-based levels need the parsed cells (font size/weight)
+            heading_hierarchy_options=HeadingHierarchyOptions(
+                enabled=True
+            ),  # bookmarks -> numbering -> font style
         )
-        _converter = DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)})
+        _converter = DocumentConverter(
+            format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}
+        )
     return _converter
 
 
@@ -65,7 +70,8 @@ def render_outputs(out: Path, pdf_path: Path | None = None) -> tuple[list, dict]
     clean_md, sections, stats = postprocess.process(doc, pdf_path, out / "figures")
     (out / "clean.md").write_text(clean_md, encoding="utf-8")
     (out / "sections.json").write_text(
-        json.dumps({"sections": sections}, indent=4, ensure_ascii=False), encoding="utf-8")
+        json.dumps({"sections": sections}, indent=4, ensure_ascii=False), encoding="utf-8"
+    )
     return sections, dict(stats)
 
 
@@ -83,13 +89,16 @@ def reprocess_saved(out_root: Path, only: str | None) -> None:
 
 
 def process_pdf(pdf: Path, out_root: Path, pages: tuple[int, int] | None, force: bool) -> str:
-    pid = pdf.stem                                   # full stem as paper ID: no collisions
+    pid = pdf.stem  # full stem as paper ID: no collisions
     out = out_root / pid
     meta_path = out / "meta.json"
     wanted_pages = list(pages) if pages else None
     if meta_path.exists() and not force:
         done = json.loads(meta_path.read_text(encoding="utf-8"))
-        if done.get("page_range") == wanted_pages and done.get("docling_options") == DOCLING_OPTIONS:
+        if (
+            done.get("page_range") == wanted_pages
+            and done.get("docling_options") == DOCLING_OPTIONS
+        ):
             return "skipped"
         # earlier run covered different pages (a test slice, now a full parse) or used other Docling options -> redo
 
@@ -105,16 +114,22 @@ def process_pdf(pdf: Path, out_root: Path, pages: tuple[int, int] | None, force:
 
     sections, stats = render_outputs(out, pdf)
 
-    meta_path.write_text(json.dumps({
-        "paper_id": pid,
-        "source_file": pdf.name,
-        "parser": "docling",
-        "docling_options": DOCLING_OPTIONS,
-        "page_range": wanted_pages,
-        "seconds": round(time.time() - start, 1),
-        "n_sections": len(sections),
-        "fixes": stats,
-    }, indent=2), encoding="utf-8")
+    meta_path.write_text(
+        json.dumps(
+            {
+                "paper_id": pid,
+                "source_file": pdf.name,
+                "parser": "docling",
+                "docling_options": DOCLING_OPTIONS,
+                "page_range": wanted_pages,
+                "seconds": round(time.time() - start, 1),
+                "n_sections": len(sections),
+                "fixes": stats,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     return "done"
 
 
@@ -151,9 +166,19 @@ def run(only=None, pages=None, force=False, reprocess=False):
 
 def main():
     ap = argparse.ArgumentParser(description="Step 02: parse PDFs with Docling.")
-    ap.add_argument("--pages", type=parse_pages, help="page range like 1-10 for quick tests (same output folders; a later full run re-parses)")
-    ap.add_argument("--only", nargs="+", metavar="PAPER_ID", help="only parse these PDFs (file stems)")
-    ap.add_argument("--reprocess", action="store_true", help="skip Docling; re-render clean.md/sections.json from saved docling.json")
+    ap.add_argument(
+        "--pages",
+        type=parse_pages,
+        help="page range like 1-10 for quick tests (same output folders; a later full run re-parses)",
+    )
+    ap.add_argument(
+        "--only", nargs="+", metavar="PAPER_ID", help="only parse these PDFs (file stems)"
+    )
+    ap.add_argument(
+        "--reprocess",
+        action="store_true",
+        help="skip Docling; re-render clean.md/sections.json from saved docling.json",
+    )
     ap.add_argument("--force", action="store_true", help="re-parse even if already done")
     args = ap.parse_args()
     run(only=args.only, pages=args.pages, force=args.force, reprocess=args.reprocess)

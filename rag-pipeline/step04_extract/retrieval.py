@@ -87,7 +87,7 @@ def embeddings(texts: list[str], client: object, path: Path, config: dict) -> np
     if path.exists():
         with np.load(path) as saved:
             if saved["vectors"].ndim == 2 and saved["vectors"].shape[1] == config["dimensions"]:
-                vectors = dict(zip(saved["keys"].tolist(), saved["vectors"]))
+                vectors = dict(zip(saved["keys"].tolist(), saved["vectors"], strict=True))
     missing = list(dict.fromkeys(k for k in keys if k not in vectors))
     lookup = dict(zip(keys, texts, strict=True))
     for start in range(0, len(missing), 32):
@@ -114,7 +114,9 @@ def retrieve(document: dict, group: str, client: object, cache: Path, config: di
     queries = [
         q + (" " + document["focus"] if document.get("focus") else "") for q in QUERIES[group]
     ]
-    matrix = embeddings(texts + queries, client, cache / "embeddings" / f"{document['id']}.npz", config)
+    matrix = embeddings(
+        texts + queries, client, cache / "embeddings" / f"{document['id']}.npz", config
+    )
     vectors, query_vectors = matrix[: len(texts)], matrix[len(texts) :]
     fused = Counter()
     channel_scores = {"bm25": Counter(), "embedding": Counter()}

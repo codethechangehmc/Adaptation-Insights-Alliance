@@ -40,12 +40,12 @@ ERROR_LOG = LOGS / "chunk_errors.log"
 
 # Chunk sizes (in tokens) and cleanup thresholds. Command-line flags or run(settings={...}) override these.
 DEFAULT_SETTINGS = {
-    "target_tokens": 450,       # text chunks stop growing near this
-    "max_tokens": 600,          # hard cap for text chunks
-    "min_tokens": 100,          # smaller sections merge into the next
-    "max_table_tokens": 1500,   # bigger tables split by rows
-    "footnote_cap": 150,        # a page's footnotes above this many tokens get their own chunk
-    "header_min_pages": 3,      # short text repeated on this many pages counts as a running header
+    "target_tokens": 450,  # text chunks stop growing near this
+    "max_tokens": 600,  # hard cap for text chunks
+    "min_tokens": 100,  # smaller sections merge into the next
+    "max_table_tokens": 1500,  # bigger tables split by rows
+    "footnote_cap": 150,  # a page's footnotes above this many tokens get their own chunk
+    "header_min_pages": 3,  # short text repeated on this many pages counts as a running header
 }
 
 
@@ -53,23 +53,28 @@ DEFAULT_SETTINGS = {
 # Token counting
 # --------------------------------------------------------------------------
 
+
 def make_token_counter():
     """tiktoken's cl100k_base matches OpenAI's embedding models. If it can't
     load (not installed / offline), fall back to a rough word-based estimate
     so the script still runs; the tokenizer used is recorded in chunks_meta."""
     try:
         import tiktoken
+
         enc = tiktoken.get_encoding("cl100k_base")
         return (lambda s: len(enc.encode(s, disallowed_special=()))), "tiktoken/cl100k_base"
     except Exception as e:
-        print(f"[warn] tiktoken unavailable ({e.__class__.__name__}); using a word-count "
-              f"estimate. `pip install tiktoken` for exact counts.")
+        print(
+            f"[warn] tiktoken unavailable ({e.__class__.__name__}); using a word-count "
+            f"estimate. `pip install tiktoken` for exact counts."
+        )
         return (lambda s: int(len(s.split()) * 1.35) + 1), "estimate/words*1.35"
 
 
 # --------------------------------------------------------------------------
 # Small helpers
 # --------------------------------------------------------------------------
+
 
 def item_pages(item):
     """Text/table items use "pages": [start, end]; footnotes use "page": n."""
@@ -108,13 +113,23 @@ def fmt_pages(pages):
 # is not mistaken for section 2015.
 HEADING_NUM_RE = re.compile(r"^\s*((?:\d{1,2}\.)*\d{1,2})\.?\s+\S")
 
-TOC_RE = re.compile(r"^\s*(table of contents|contents|sommaire|table des mati[eè]res)\s*:?\s*$", re.I)
+TOC_RE = re.compile(
+    r"^\s*(table of contents|contents|sommaire|table des mati[eè]res)\s*:?\s*$", re.I
+)
 NUM_PREFIX = r"^\s*(?:(?:\d+\.)*\d+\.?\s*)?"
-REF_RE = re.compile(NUM_PREFIX + r"(references|bibliography|works cited|literature cited|r[ée]f[ée]rences)\b", re.I)
-ANNEX_RE = re.compile(NUM_PREFIX + r"(annex|annexe|annexes|appendix|appendices|attachment)\b", re.I)
+REF_RE = re.compile(
+    NUM_PREFIX + r"(references|bibliography|works cited|literature cited|r[ée]f[ée]rences)\b", re.I
+)
+ANNEX_RE = re.compile(
+    NUM_PREFIX + r"(annex|annexe|annexes|appendix|appendices|attachment)\b", re.I
+)
 # "Lists of" (tables, boxes, annexes...) that belong to the table of contents.
-TOC_LIST_RE = re.compile(r"^\s*(list of )?(tables|figures|boxes|maps|charts|graphs|annexes|appendices)\s*:?\s*$", re.I)
-DATA_RE = re.compile(r"\b(data ?sheet|results framework|results matrix|logical framework|logframe)\b", re.I)
+TOC_LIST_RE = re.compile(
+    r"^\s*(list of )?(tables|figures|boxes|maps|charts|graphs|annexes|appendices)\s*:?\s*$", re.I
+)
+DATA_RE = re.compile(
+    r"\b(data ?sheet|results framework|results matrix|logical framework|logframe)\b", re.I
+)
 
 
 def infer_heading_paths(sections):
@@ -135,8 +150,9 @@ def infer_heading_paths(sections):
         num = m.group(1)
         seen[num] = heading
         parts = num.split(".")
-        ancestors = [seen[".".join(parts[:i])] for i in range(1, len(parts))
-                     if ".".join(parts[:i]) in seen]
+        ancestors = [
+            seen[".".join(parts[:i])] for i in range(1, len(parts)) if ".".join(parts[:i]) in seen
+        ]
         s["_path"] = ancestors + [heading]
 
 
@@ -162,7 +178,9 @@ def classify_sections(sections):
         raw_path = s.get("heading_path") or []
         toc_parent = len(raw_path) > 1 and bool(TOC_RE.match(raw_path[-2]))
         s["heading_path"] = [p for p in raw_path if not TOC_RE.match(p)]
-        if TOC_RE.match(h) or (TOC_LIST_RE.match(h) and (toc_parent or h.lower().startswith("list of"))):
+        if TOC_RE.match(h) or (
+            TOC_LIST_RE.match(h) and (toc_parent or h.lower().startswith("list of"))
+        ):
             s["_kind"] = "toc"
             continue
         parents = [p.strip() for p in s["heading_path"][:-1]]
@@ -215,7 +233,7 @@ def split_long_text(text, max_tokens, count):
                 cur = []
             words = sent.split()
             step = max(1, int(len(words) * max_tokens / max(count(sent), 1)))
-            pieces.extend(" ".join(words[i:i + step]) for i in range(0, len(words), step))
+            pieces.extend(" ".join(words[i : i + step]) for i in range(0, len(words), step))
             continue
         if cur and count(" ".join(cur + [sent])) > max_tokens:
             pieces.append(" ".join(cur))
@@ -229,6 +247,7 @@ def split_long_text(text, max_tokens, count):
 # --------------------------------------------------------------------------
 # Tables
 # --------------------------------------------------------------------------
+
 
 def _cell(v):
     return re.sub(r"\s+", " ", str(v if v is not None else "")).replace("|", "\\|").strip()
@@ -280,6 +299,7 @@ def nearby_text(prev, item):
 # The chunker
 # --------------------------------------------------------------------------
 
+
 class PaperChunker:
     def __init__(self, paper_id, title, count, settings):
         self.paper_id = paper_id
@@ -287,8 +307,8 @@ class PaperChunker:
         self.count = count
         self.settings = settings
         self.chunks = []
-        self.footnotes = []          # (page, text, path, kind)
-        self.pos = 0                 # reading-order counter
+        self.footnotes = []  # (page, text, path, kind)
+        self.pos = 0  # reading-order counter
         self.stats = defaultdict(int)
         self._reset_buf()
         self.cur_path, self.cur_kind, self.cur_data = [], "body", False
@@ -296,7 +316,7 @@ class PaperChunker:
     # ---- text buffer ------------------------------------------------------
 
     def _reset_buf(self):
-        self.buf = []                # list of (text, pages_or_None, order)
+        self.buf = []  # list of (text, pages_or_None, order)
         self.buf_tokens = 0
         self.buf_path, self.buf_kind, self.buf_data = [], "body", False
         self.buf_headings = []
@@ -317,11 +337,17 @@ class PaperChunker:
         """A small leftover at the end of a section (e.g. the last two bullets
         of a list) goes back into the previous chunk of the SAME section if it
         fits, instead of becoming a tiny chunk of its own."""
-        if not (self.buf and self._has_content() and self.buf_tokens < self.settings["min_tokens"]):
+        if not (
+            self.buf and self._has_content() and self.buf_tokens < self.settings["min_tokens"]
+        ):
             return False
         prev = self.chunks[-1] if self.chunks else None
-        if not prev or prev["type"] != "text" or prev["heading_path"] != self.buf_path \
-                or prev["section_kind"] != self.buf_kind:
+        if (
+            not prev
+            or prev["type"] != "text"
+            or prev["heading_path"] != self.buf_path
+            or prev["section_kind"] != self.buf_kind
+        ):
             return False
         if self.count(prev["text"]) + self.buf_tokens > self.settings["max_tokens"]:
             return False
@@ -335,23 +361,28 @@ class PaperChunker:
         if self.try_merge_back():
             return
         if self.buf and self._has_content():
-            self.chunks.append({
-                "type": "text",
-                "section_kind": self.buf_kind,
-                "data_section": self.buf_data,
-                "heading_path": self.buf_path,
-                "headings": self.buf_headings,
-                "pages": merge_pages([p for _, p, _ in self.buf]),
-                "text": "\n\n".join(t for t, _, _ in self.buf),
-                "_order": min(o for _, p, o in self.buf if p is not None),
-            })
+            self.chunks.append(
+                {
+                    "type": "text",
+                    "section_kind": self.buf_kind,
+                    "data_section": self.buf_data,
+                    "heading_path": self.buf_path,
+                    "headings": self.buf_headings,
+                    "pages": merge_pages([p for _, p, _ in self.buf]),
+                    "text": "\n\n".join(t for t, _, _ in self.buf),
+                    "_order": min(o for _, p, o in self.buf if p is not None),
+                }
+            )
         self._reset_buf()
 
     def begin_section(self, path, kind, data):
         # Close the running chunk at a section boundary, unless it's still
         # tiny: then this section is merged into it (with its heading inline).
-        if not self.try_merge_back() and self.buf and \
-                (self.buf_tokens >= self.settings["min_tokens"] or kind != self.buf_kind):
+        if (
+            not self.try_merge_back()
+            and self.buf
+            and (self.buf_tokens >= self.settings["min_tokens"] or kind != self.buf_kind)
+        ):
             self.flush()
         self.cur_path, self.cur_kind, self.cur_data = path, kind, data
         if self.buf and path:
@@ -374,12 +405,31 @@ class PaperChunker:
         n = self.count(text)
         if self.buf and self._has_content():
             # Prefer to stop near target size; never exceed max size.
-            if (self.buf_tokens + n > self.settings["target_tokens"] and self.buf_tokens >= self.settings["min_tokens"]) \
-                    or self.buf_tokens + n > self.settings["max_tokens"]:
+            if (
+                self.buf_tokens + n > self.settings["target_tokens"]
+                and self.buf_tokens >= self.settings["min_tokens"]
+            ) or self.buf_tokens + n > self.settings["max_tokens"]:
                 self.flush()
         self._append(text, pages, order)
 
     # ---- tables -----------------------------------------------------------
+
+    def table_groups(self, row_md: list[str], fixed: int) -> list[list[int]]:
+        """Group whole table rows under the token cap, repeating header overhead."""
+        groups, cur, cur_tok = [], [], fixed
+        for i, line in enumerate(row_md):
+            t = self.count(line)
+            if cur and cur_tok + t > self.settings["max_table_tokens"]:
+                groups.append(cur)
+                cur, cur_tok = [], fixed
+            cur.append(i)
+            cur_tok += t
+        if cur or not groups:
+            groups.append(cur)
+        if len(groups) > 1:
+            self.stats["tables_split"] += 1
+
+        return groups
 
     def add_table(self, item, context):
         # A table ends the running text chunk. Otherwise a tiny text buffer
@@ -394,8 +444,12 @@ class PaperChunker:
         self.flush()
         self.pos += 1
         all_rows = item.get("rows") or []
-        all_pages = item.get("row_pages") or [None] * len(all_rows)   # older sections.json: no row pages
-        kept = [(r, p) for r, p in zip(all_rows, all_pages) if any(_cell(c) for c in r)]
+        all_pages = item.get("row_pages") or [None] * len(
+            all_rows
+        )  # older sections.json: no row pages
+        kept = [
+            (r, p) for r, p in zip(all_rows, all_pages, strict=True) if any(_cell(c) for c in r)
+        ]
         rows = [r for r, _ in kept]
         row_pages = [p for _, p in kept]
         header_rows = item.get("header") or []
@@ -410,18 +464,7 @@ class PaperChunker:
         fixed = self.count(head_md) + (self.count(title) if title else 0) + 10
 
         # Group rows so each piece (header repeated) stays under the table cap.
-        groups, cur, cur_tok = [], [], fixed
-        for i, line in enumerate(row_md):
-            t = self.count(line)
-            if cur and cur_tok + t > self.settings["max_table_tokens"]:
-                groups.append(cur)
-                cur, cur_tok = [], fixed
-            cur.append(i)
-            cur_tok += t
-        if cur or not groups:
-            groups.append(cur)
-        if len(groups) > 1:
-            self.stats["tables_split"] += 1
+        groups = self.table_groups(row_md, fixed)
 
         n_rows = len(rows)
         for g in groups:
@@ -445,22 +488,28 @@ class PaperChunker:
             piece_pages = [min(own), max(own)] if own else (list(pages) if pages else None)
             text = ("\n".join(label) + "\n" if label else "") + head_md + "\n" + "\n".join(body_md)
             serialized = "\n".join(body_rows)
-            self.chunks.append({
-                "type": "table",
-                "section_kind": self.cur_kind,
-                "data_section": self.cur_data,
-                "heading_path": list(self.cur_path),
-                "headings": [self.cur_path[-1]] if self.cur_path else [],
-                "pages": piece_pages,
-                "text": text,
-                "table": {"title": title or None, "columns": columns,
-                          "row_range": [lo, hi], "n_rows_total": n_rows},
-                "suspect_table": bool(suspect),
-                "suspect_reasons": suspect,
-                "_context": context,
-                "_embed_body": serialized,
-                "_order": self.pos,
-            })
+            self.chunks.append(
+                {
+                    "type": "table",
+                    "section_kind": self.cur_kind,
+                    "data_section": self.cur_data,
+                    "heading_path": list(self.cur_path),
+                    "headings": [self.cur_path[-1]] if self.cur_path else [],
+                    "pages": piece_pages,
+                    "text": text,
+                    "table": {
+                        "title": title or None,
+                        "columns": columns,
+                        "row_range": [lo, hi],
+                        "n_rows_total": n_rows,
+                    },
+                    "suspect_table": bool(suspect),
+                    "suspect_reasons": suspect,
+                    "_context": context,
+                    "_embed_body": serialized,
+                    "_order": self.pos,
+                }
+            )
             self.pos += 1
 
     # ---- figures ----------------------------------------------------------
@@ -489,18 +538,20 @@ class PaperChunker:
         for k, piece in enumerate(pieces):
             part = f" (part {k + 1} of {len(pieces)})" if len(pieces) > 1 else ""
             text = head + part + (("\nFigure text: " + piece) if piece else "")
-            self.chunks.append({
-                "type": "figure",
-                "section_kind": self.cur_kind,
-                "data_section": self.cur_data,
-                "heading_path": list(self.cur_path),
-                "headings": [self.cur_path[-1]] if self.cur_path else [],
-                "pages": list(pages) if pages else None,
-                "text": text,
-                "image": item.get("image"),
-                "_context": context,
-                "_order": self.pos,
-            })
+            self.chunks.append(
+                {
+                    "type": "figure",
+                    "section_kind": self.cur_kind,
+                    "data_section": self.cur_data,
+                    "heading_path": list(self.cur_path),
+                    "headings": [self.cur_path[-1]] if self.cur_path else [],
+                    "pages": list(pages) if pages else None,
+                    "text": text,
+                    "image": item.get("image"),
+                    "_context": context,
+                    "_order": self.pos,
+                }
+            )
             self.pos += 1
 
     # ---- footnotes --------------------------------------------------------
@@ -516,25 +567,33 @@ class PaperChunker:
             by_page[f[0]].append(f)
 
         for page, fns in sorted(by_page.items()):
-            cands = [c for c in self.chunks if c["type"] == "text" and c["pages"]
-                     and c["pages"][0] <= page <= c["pages"][1]]
+            cands = [
+                c
+                for c in self.chunks
+                if c["type"] == "text" and c["pages"] and c["pages"][0] <= page <= c["pages"][1]
+            ]
             total = sum(self.count(f[1]) for f in fns)
             if not cands or total > self.settings["footnote_cap"]:
                 self.stats["footnote_chunks"] += 1
                 # Sort it after the last chunk that starts on or before its page.
-                before = [c["_order"] for c in self.chunks
-                          if c["pages"] and c["pages"][0] <= page and c["type"] != "footnote"]
+                before = [
+                    c["_order"]
+                    for c in self.chunks
+                    if c["pages"] and c["pages"][0] <= page and c["type"] != "footnote"
+                ]
                 order = (max(before) + 0.5) if before else -1
-                self.chunks.append({
-                    "type": "footnote",
-                    "section_kind": fns[0][3],
-                    "data_section": False,
-                    "heading_path": fns[0][2],
-                    "headings": [fns[0][2][-1]] if fns[0][2] else [],
-                    "pages": [page, page],
-                    "text": f"Footnotes (p. {page}):\n" + "\n".join(f[1] for f in fns),
-                    "_order": order,
-                })
+                self.chunks.append(
+                    {
+                        "type": "footnote",
+                        "section_kind": fns[0][3],
+                        "data_section": False,
+                        "heading_path": fns[0][2],
+                        "headings": [fns[0][2][-1]] if fns[0][2] else [],
+                        "pages": [page, page],
+                        "text": f"Footnotes (p. {page}):\n" + "\n".join(f[1] for f in fns),
+                        "_order": order,
+                    }
+                )
                 continue
             for page_, text, _, _ in fns:
                 target = None
@@ -557,6 +616,10 @@ class PaperChunker:
                 target.setdefault("_fns", []).append((page_, text))
                 self.stats["footnotes_attached"] += 1
 
+        self.render_attached_footnotes()
+
+    def render_attached_footnotes(self) -> None:
+        """Append attached footnote text once, keeping its physical PDF pages."""
         for c in self.chunks:
             fns = c.pop("_fns", None)
             if fns:
@@ -564,11 +627,20 @@ class PaperChunker:
 
     # ---- driver -----------------------------------------------------------
 
+    def keep_text(self, text: str, running: set[str]) -> bool:
+        """Skip empty text and repeated short running headers."""
+        if not text:
+            return False
+        if len(text) <= 120 and norm_for_repeat(text) in running:
+            self.stats["running_headers_dropped"] += 1
+            return False
+        return True
+
     def run(self, sections):
-        classify_sections(sections)      # first: it also strips the TOC from heading paths
+        classify_sections(sections)  # first: it also strips the TOC from heading paths
         infer_heading_paths(sections)
         running = find_running_headers(sections, self.settings["header_min_pages"])
-        prev_text = None     # (text, last page) of the latest text item, across sections
+        prev_text = None  # (text, last page) of the latest text item, across sections
 
         for s in sections:
             if s.get("_kind") == "toc":
@@ -581,10 +653,7 @@ class PaperChunker:
                 typ = it.get("type")
                 text = (it.get("text") or "").strip()
                 if typ == "text":
-                    if not text:
-                        continue
-                    if len(text) <= 120 and norm_for_repeat(text) in running:
-                        self.stats["running_headers_dropped"] += 1
+                    if not self.keep_text(text, running):
                         continue
                     self.add_text(text, item_pages(it))
                     last_text = text
@@ -651,7 +720,7 @@ class PaperChunker:
                 "table": c.get("table"),
                 "suspect_table": c.get("suspect_table", False),
                 "suspect_reasons": c.get("suspect_reasons", []),
-                "image": c.get("image"),     # figures only: PNG path relative to the paper folder
+                "image": c.get("image"),  # figures only: PNG path relative to the paper folder
             }
             out.append(rec)
         return out
@@ -660,6 +729,7 @@ class PaperChunker:
 # --------------------------------------------------------------------------
 # Titles from doc_index.csv
 # --------------------------------------------------------------------------
+
 
 def load_titles(path):
     """Map filename stem -> title. Column names are guessed (a column with
@@ -671,18 +741,25 @@ def load_titles(path):
         reader = csv.DictReader(f)
         cols = reader.fieldnames or []
         file_col = next((c for c in cols if "file" in c.lower()), None)
-        title_col = next((c for c in cols if c.lower() == "title"), None) or \
-            next((c for c in cols if "title" in c.lower()), None)
+        title_col = next((c for c in cols if c.lower() == "title"), None) or next(
+            (c for c in cols if "title" in c.lower()), None
+        )
         if not file_col or not title_col:
-            print(f"[warn] {path}: couldn't find filename/title columns in {cols}; using paper ids.")
+            print(
+                f"[warn] {path}: couldn't find filename/title columns in {cols}; using paper ids."
+            )
             return {}
-        return {Path(r[file_col]).stem: r[title_col].strip()
-                for r in reader if r.get(file_col) and r.get(title_col)}
+        return {
+            Path(r[file_col]).stem: r[title_col].strip()
+            for r in reader
+            if r.get(file_col) and r.get(title_col)
+        }
 
 
 # --------------------------------------------------------------------------
 # Output
 # --------------------------------------------------------------------------
+
 
 def write_atomic(path, text):
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -696,8 +773,10 @@ def dump_md(chunks, path):
         flags = [c["type"], c["section_kind"]]
         if c["suspect_table"]:
             flags.append("SUSPECT TABLE")
-        lines.append(f"## {c['chunk_id']}  [{', '.join(flags)}]  "
-                     f"{fmt_pages(c['pages'])}  ({c['n_tokens']} tok)")
+        lines.append(
+            f"## {c['chunk_id']}  [{', '.join(flags)}]  "
+            f"{fmt_pages(c['pages'])}  ({c['n_tokens']} tok)"
+        )
         lines.append(f"**Section:** {' > '.join(c['heading_path']) or '(none)'}")
         if len(c["headings"]) > 1:
             lines.append(f"**Also covers:** {'; '.join(c['headings'][1:])}")
@@ -716,9 +795,11 @@ def summarize(paper_id, chunks, stats):
         by_type[c["type"]] += 1
     types = ", ".join(f"{k} {v}" for k, v in sorted(by_type.items()))
     extra = ", ".join(f"{k} {v}" for k, v in sorted(stats.items()) if v)
-    return (f"{paper_id}: {len(chunks)} chunks ({types}) | tokens min/med/max "
-            f"{min(toks)}/{int(statistics.median(toks))}/{max(toks)}"
-            + (f" | {extra}" if extra else ""))
+    return (
+        f"{paper_id}: {len(chunks)} chunks ({types}) | tokens min/med/max "
+        f"{min(toks)}/{int(statistics.median(toks))}/{max(toks)}"
+        + (f" | {extra}" if extra else "")
+    )
 
 
 def needs_rebuild(paper_dir, out_dir, params, force):
@@ -738,17 +819,21 @@ def needs_rebuild(paper_dir, out_dir, params, force):
 # Main
 # --------------------------------------------------------------------------
 
+
 def run(only=None, force=False, write_md=False, doc_index=DOC_INDEX, settings=None):
     """Chunk parsed papers. only = list of paper ids (None = all); settings = dict overriding DEFAULT_SETTINGS."""
-    s = dict(DEFAULT_SETTINGS)              # start from the defaults...
-    s.update(settings or {})                # ...then apply any overrides
+    s = dict(DEFAULT_SETTINGS)  # start from the defaults...
+    s.update(settings or {})  # ...then apply any overrides
     count, tokenizer = make_token_counter()
     params = {"chunker_version": CHUNKER_VERSION, "tokenizer": tokenizer}
-    params.update(s)                        # recorded in chunks_meta.json; a change triggers a rebuild
+    params.update(s)  # recorded in chunks_meta.json; a change triggers a rebuild
     titles = load_titles(doc_index)
 
-    paper_dirs = sorted(d for d in PARSED.iterdir() if (d / "sections.json").exists()) \
-        if PARSED.exists() else []
+    paper_dirs = (
+        sorted(d for d in PARSED.iterdir() if (d / "sections.json").exists())
+        if PARSED.exists()
+        else []
+    )
     if only:
         wanted = set(only)
         missing = wanted - {d.name for d in paper_dirs}
@@ -771,8 +856,10 @@ def run(only=None, force=False, write_md=False, doc_index=DOC_INDEX, settings=No
             chunker = PaperChunker(pid, titles.get(pid, pid), count, s)
             chunks = chunker.run(sections)
             out.mkdir(parents=True, exist_ok=True)
-            write_atomic(out / "chunks.jsonl",
-                         "".join(json.dumps(c, ensure_ascii=False) + "\n" for c in chunks))
+            write_atomic(
+                out / "chunks.jsonl",
+                "".join(json.dumps(c, ensure_ascii=False) + "\n" for c in chunks),
+            )
             if write_md:
                 dump_md(chunks, out / "chunks.md")
             meta = {
@@ -782,7 +869,9 @@ def run(only=None, force=False, write_md=False, doc_index=DOC_INDEX, settings=No
                 "n_chunks": len(chunks),
                 "stats": dict(chunker.stats),
             }
-            write_atomic(out / "chunks_meta.json", json.dumps(meta, indent=2))   # last = done marker
+            write_atomic(
+                out / "chunks_meta.json", json.dumps(meta, indent=2)
+            )  # last = done marker
             print(summarize(pid, chunks, chunker.stats))
             done += 1
         except Exception as e:
@@ -797,22 +886,58 @@ def run(only=None, force=False, write_md=False, doc_index=DOC_INDEX, settings=No
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--only", nargs="+", metavar="PAPER_ID", help="chunk only these papers")
     ap.add_argument("--force", action="store_true", help="rebuild even if up to date")
     ap.add_argument("--dump-md", action="store_true", help="also write chunks.md for reading")
     ap.add_argument("--doc-index", type=Path, default=DOC_INDEX, help="for document titles")
-    ap.add_argument("--target-tokens", type=int, default=DEFAULT_SETTINGS["target_tokens"], help="text chunks stop growing near this")
-    ap.add_argument("--max-tokens", type=int, default=DEFAULT_SETTINGS["max_tokens"], help="hard cap for text chunks")
-    ap.add_argument("--min-tokens", type=int, default=DEFAULT_SETTINGS["min_tokens"], help="smaller sections merge into the next")
-    ap.add_argument("--max-table-tokens", type=int, default=DEFAULT_SETTINGS["max_table_tokens"], help="bigger tables split by rows")
-    ap.add_argument("--footnote-cap", type=int, default=DEFAULT_SETTINGS["footnote_cap"],
-                    help="a page's footnotes above this many tokens get their own chunk")
-    ap.add_argument("--header-min-pages", type=int, default=DEFAULT_SETTINGS["header_min_pages"],
-                    help="short text repeated on this many pages counts as a running header")
+    ap.add_argument(
+        "--target-tokens",
+        type=int,
+        default=DEFAULT_SETTINGS["target_tokens"],
+        help="text chunks stop growing near this",
+    )
+    ap.add_argument(
+        "--max-tokens",
+        type=int,
+        default=DEFAULT_SETTINGS["max_tokens"],
+        help="hard cap for text chunks",
+    )
+    ap.add_argument(
+        "--min-tokens",
+        type=int,
+        default=DEFAULT_SETTINGS["min_tokens"],
+        help="smaller sections merge into the next",
+    )
+    ap.add_argument(
+        "--max-table-tokens",
+        type=int,
+        default=DEFAULT_SETTINGS["max_table_tokens"],
+        help="bigger tables split by rows",
+    )
+    ap.add_argument(
+        "--footnote-cap",
+        type=int,
+        default=DEFAULT_SETTINGS["footnote_cap"],
+        help="a page's footnotes above this many tokens get their own chunk",
+    )
+    ap.add_argument(
+        "--header-min-pages",
+        type=int,
+        default=DEFAULT_SETTINGS["header_min_pages"],
+        help="short text repeated on this many pages counts as a running header",
+    )
     args = ap.parse_args()
     settings = {name: getattr(args, name) for name in DEFAULT_SETTINGS}
-    run(only=args.only, force=args.force, write_md=args.dump_md, doc_index=args.doc_index, settings=settings)
+    run(
+        only=args.only,
+        force=args.force,
+        write_md=args.dump_md,
+        doc_index=args.doc_index,
+        settings=settings,
+    )
 
 
 if __name__ == "__main__":

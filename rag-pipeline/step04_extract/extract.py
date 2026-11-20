@@ -31,6 +31,7 @@ From Python (this is what run.py does):
     from step04_extract import extract
     extract.run(methods=["hybrid"], documents=["P001"], execute=True, run_id="h01")
 """
+
 import argparse
 import json
 import re
@@ -45,8 +46,8 @@ from step04_extract.inputs import load_manifest
 from step04_extract.tasks import GROUPS, METHODS
 from step04_extract.workbook import export_xlsx
 
-CACHE = EXTRACTED / "cache"     # embeddings and PDF upload ids, shared by every run
-ENV_FILE = ROOT / ".env"        # OPENAI_API_KEY=... (gitignored)
+CACHE = EXTRACTED / "cache"  # embeddings and PDF upload ids, shared by every run
+ENV_FILE = ROOT / ".env"  # OPENAI_API_KEY=... (gitignored)
 
 
 def run_folder(run_id):
@@ -59,13 +60,27 @@ def run_folder(run_id):
 def write_exports(output, xlsx):
     """Write the run's tables (exports.py) and, if asked, the filled results workbook."""
     tables = export_run(output)
-    print(", ".join(f"{len(rows)} {name} rows" for name, rows in tables.items()), "->", output / "exports")
+    print(
+        ", ".join(f"{len(rows)} {name} rows" for name, rows in tables.items()),
+        "->",
+        output / "exports",
+    )
     if xlsx:
         print(export_xlsx(output, tables["results"], tables["projects"]))
 
 
-def run(documents=None, methods=METHODS, groups=GROUPS, repeats=1, run_id="", execute=False,
-        resume=False, max_cost_usd=None, xlsx=False, export_only=False):
+def run(
+    documents=None,
+    methods=METHODS,
+    groups=GROUPS,
+    repeats=1,
+    run_id="",
+    execute=False,
+    resume=False,
+    max_cost_usd=None,
+    xlsx=False,
+    export_only=False,
+):
     """Preview (the default) or run extraction. Returns the run folder, or None for a preview.
 
     documents = project codes or paper ids from the manifest (None = every report).
@@ -107,31 +122,59 @@ def run(documents=None, methods=METHODS, groups=GROUPS, repeats=1, run_id="", ex
 
     # 3. Write the tables. Free.
     write_exports(output, xlsx)
-    print(f"Run {run_id}: " + ("all jobs completed." if success else "some jobs failed; see the run folder."))
+    print(
+        f"Run {run_id}: "
+        + ("all jobs completed." if success else "some jobs failed; see the run folder.")
+    )
     print(f"Next: python -m step05_evaluate.evaluate --run-id {run_id}")
     return output
 
 
 def main():
     ap = argparse.ArgumentParser(description="Step 04: extract project facts from each report.")
-    ap.add_argument("--documents", nargs="+", metavar="ID",
-                    help="project codes or paper ids from the manifest (default: all)")
+    ap.add_argument(
+        "--documents",
+        nargs="+",
+        metavar="ID",
+        help="project codes or paper ids from the manifest (default: all)",
+    )
     ap.add_argument("--methods", nargs="+", choices=METHODS, default=list(METHODS))
-    ap.add_argument("--groups", nargs="+", choices=GROUPS, default=list(GROUPS), help="tasks to run")
-    ap.add_argument("--repeats", type=int, default=1, help="trials per job, to see run-to-run variation")
+    ap.add_argument(
+        "--groups", nargs="+", choices=GROUPS, default=list(GROUPS), help="tasks to run"
+    )
+    ap.add_argument(
+        "--repeats", type=int, default=1, help="trials per job, to see run-to-run variation"
+    )
     ap.add_argument("--run-id", default="", help="run folder name under data/04_extracted/")
-    ap.add_argument("--execute", action="store_true", help="make the paid API calls (default: preview)")
-    ap.add_argument("--resume", action="store_true", help="continue an interrupted run with the same settings")
+    ap.add_argument(
+        "--execute", action="store_true", help="make the paid API calls (default: preview)"
+    )
+    ap.add_argument(
+        "--resume", action="store_true", help="continue an interrupted run with the same settings"
+    )
     ap.add_argument("--max-cost-usd", type=float, help="override the budget in config.json")
     ap.add_argument("--xlsx", action="store_true", help="also fill the results workbook")
-    ap.add_argument("--export-only", action="store_true", help="rebuild an existing run's exports; no API calls")
+    ap.add_argument(
+        "--export-only",
+        action="store_true",
+        help="rebuild an existing run's exports; no API calls",
+    )
     args = ap.parse_args()
     try:
-        run(documents=args.documents, methods=args.methods, groups=args.groups, repeats=args.repeats,
-            run_id=args.run_id, execute=args.execute, resume=args.resume,
-            max_cost_usd=args.max_cost_usd, xlsx=args.xlsx, export_only=args.export_only)
+        run(
+            documents=args.documents,
+            methods=args.methods,
+            groups=args.groups,
+            repeats=args.repeats,
+            run_id=args.run_id,
+            execute=args.execute,
+            resume=args.resume,
+            max_cost_usd=args.max_cost_usd,
+            xlsx=args.xlsx,
+            export_only=args.export_only,
+        )
     except (ValueError, OSError, KeyError, TypeError) as error:
-        raise SystemExit(f"Error: {error}")
+        raise SystemExit(f"Error: {error}") from error
 
 
 if __name__ == "__main__":

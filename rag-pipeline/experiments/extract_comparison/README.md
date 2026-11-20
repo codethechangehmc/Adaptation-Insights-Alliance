@@ -19,8 +19,9 @@ Each method runs five separate tasks per report: identity, geography,
 rationale, results and finance. Three reports, three methods and five tasks
 make 45 model calls per trial. The output is raw facts with quotes and PDF
 pages, plus a mapping to the team's results workbook. Screening and
-harmonisation are out of scope. [DECISIONS.md](DECISIONS.md) explains the
+harmonisation are out of scope. [DECISIONS.md](../../step04_extract/DECISIONS.md) explains the
 choices behind the prompts, retrieval, checks and exports.
+[HOW_IT_WORKS.md](HOW_IT_WORKS.md) walks through the original pilot code step by step.
 
 The reports are development cases from the tuning set:
 

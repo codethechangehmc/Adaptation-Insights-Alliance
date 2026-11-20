@@ -26,12 +26,14 @@ def load_manifest(path: Path = MANIFEST, selected: list[str] | None = None) -> l
         if selected and item["id"] not in selected and item["paper"] not in selected:
             continue
         paper = item["paper"]
-        resolved.append({
-            **item,
-            "pdf": RAW / f"{paper}.pdf",
-            "sections": PARSED / paper / "sections.json",
-            "chunks": CHUNKS / paper / "chunks.jsonl",
-        })
+        resolved.append(
+            {
+                **item,
+                "pdf": RAW / f"{paper}.pdf",
+                "sections": PARSED / paper / "sections.json",
+                "chunks": CHUNKS / paper / "chunks.jsonl",
+            }
+        )
     return resolved
 
 
@@ -160,17 +162,19 @@ def load_chunks(path: Path) -> list[dict]:
             continue
         c = json.loads(line)
         heading = " > ".join(c.get("heading_path") or [])
-        chunks.append({
-            "id": c["chunk_id"],
-            "text": c["text"],
-            "pages": list(c["pages"]),
-            "type": c["type"],
-            "heading": heading,
-            "section_id": heading,                 # neighbours = chunks under the same heading
-            "section_kind": c.get("section_kind", "body"),
-            "search_text": c["embed_text"],        # text with title/section/page prefix
-            "suspect": c.get("suspect_reasons", []),
-        })
+        chunks.append(
+            {
+                "id": c["chunk_id"],
+                "text": c["text"],
+                "pages": list(c["pages"]),
+                "type": c["type"],
+                "heading": heading,
+                "section_id": heading,  # neighbours = chunks under the same heading
+                "section_kind": c.get("section_kind", "body"),
+                "search_text": c["embed_text"],  # text with title/section/page prefix
+                "suspect": c.get("suspect_reasons", []),
+            }
+        )
     if not chunks:
         raise ValueError(f"No chunks in {path}")
     return chunks

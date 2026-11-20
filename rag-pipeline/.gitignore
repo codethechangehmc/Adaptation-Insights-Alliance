@@ -223,3 +223,6 @@ __marimo__/
 /data
 /raw/
 /parsed/
+
+# Local artifacts retained after the extraction experiment code moved to numbered steps.
+/extract_experiments/
