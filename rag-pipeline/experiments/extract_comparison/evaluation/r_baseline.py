@@ -3,10 +3,9 @@
 from pathlib import Path
 
 import jsonschema
-
-from common.files import file_hash, fingerprint, read_json, write_json
-from common.runner import check_answer
-from common.tasks import FIELDS, GROUPS, RESULT_CONTEXT_FIELDS, response_schema
+from step04_extract.files import file_hash, fingerprint, read_json, write_json
+from step04_extract.runner import check_answer
+from step04_extract.tasks import FIELDS, GROUPS, RESULT_CONTEXT_FIELDS, response_schema
 
 METHOD = "r_baseline"
 ARRAY_FIELDS = {"funder_names", "implementor_names"}

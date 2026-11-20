@@ -58,7 +58,9 @@ def result_fact(**changes) -> dict:
     return {**fact, **changes}
 
 
-def chunk_line(paper: str, index: int, text: str, pages: list, kind: str = "text", **extra) -> dict:
+def chunk_line(
+    paper: str, index: int, text: str, pages: list, kind: str = "text", **extra
+) -> dict:
     """One line of chunks.jsonl in step 03's format."""
     return {
         "chunk_id": f"{paper}_c{index:04d}",
@@ -94,8 +96,14 @@ class FakeClient:
             [result_fact()]
             if group == "results"
             else [
-                {"field": f, "value": "", "status": "not_found_in_input", "scope": "",
-                 "derivation": "", "evidence": []}
+                {
+                    "field": f,
+                    "value": "",
+                    "status": "not_found_in_input",
+                    "scope": "",
+                    "derivation": "",
+                    "evidence": [],
+                }
                 for f in FIELDS[group]
             ]
         )
@@ -142,13 +150,20 @@ class Workflows(unittest.TestCase):
             document.save(pdf)
         write_json(
             self.directory / "parsed" / paper / "sections.json",
-            {"sections": [{"heading": "Results", "pages": [2, 2], "content": ["12.5 hectares restored"]}]},
+            {
+                "sections": [
+                    {"heading": "Results", "pages": [2, 2], "content": ["12.5 hectares restored"]}
+                ]
+            },
         )
-        self.write_chunks(paper, [
-            chunk_line(paper, 0, "Report 2019. Project P123.", [1, 1]),
-            chunk_line(paper, 1, "12.5 hectares restored", [2, 2], section_kind="annex"),
-            chunk_line(paper, 2, "Target: 90 hectares.", [3, 3]),
-        ])
+        self.write_chunks(
+            paper,
+            [
+                chunk_line(paper, 0, "Report 2019. Project P123.", [1, 1]),
+                chunk_line(paper, 1, "12.5 hectares restored", [2, 2], section_kind="annex"),
+                chunk_line(paper, 2, "Target: 90 hectares.", [3, 3]),
+            ],
+        )
         entries = read_json(self.manifest)["documents"] if self.manifest.exists() else []
         entries.append({"id": report_id, "paper": paper, "family": "wb_icr", "focus": ""})
         write_json(self.manifest, {"documents": entries})
@@ -162,16 +177,29 @@ class Workflows(unittest.TestCase):
     def benchmark(self) -> Path:
         """A reviewed result label for D1 and a result set declared complete."""
         path = self.directory / "review.json"
-        write_json(path, {
-            "labels": [{
-                "id": "L1", "document": "D1", "group": "results", "field": "result",
-                "values": ["12.5"], "metric_aliases": ["land restored"],
-                "unit_aliases": ["hectares"], "scope_aliases": ["whole project"], "reviewed": True,
-                "evidence_groups": [[{"quote": "12.5 hectares restored", "pages": [2]}]],
-            }],
-            "exhaustive": [{"document": "D1", "group": "results", "field": "result", "reviewed": True}],
-            "judgements": {},
-        })
+        write_json(
+            path,
+            {
+                "labels": [
+                    {
+                        "id": "L1",
+                        "document": "D1",
+                        "group": "results",
+                        "field": "result",
+                        "values": ["12.5"],
+                        "metric_aliases": ["land restored"],
+                        "unit_aliases": ["hectares"],
+                        "scope_aliases": ["whole project"],
+                        "reviewed": True,
+                        "evidence_groups": [[{"quote": "12.5 hectares restored", "pages": [2]}]],
+                    }
+                ],
+                "exhaustive": [
+                    {"document": "D1", "group": "results", "field": "result", "reviewed": True}
+                ],
+                "judgements": {},
+            },
+        )
         return path
 
     def run_fake(self, documents: list[dict], methods=METHODS, groups=GROUPS, name="run") -> Path:
@@ -180,7 +208,9 @@ class Workflows(unittest.TestCase):
         planned = jobs(documents, list(methods), list(groups), 1)
         output = self.directory / name
         start_run(output, planned, prepared, self.config, False)
-        self.assertTrue(execute(planned, prepared, self.config, FakeClient(), output, self.directory / "cache"))
+        self.assertTrue(
+            execute(planned, prepared, self.config, FakeClient(), output, self.directory / "cache")
+        )
         return output
 
     # ------------------------------------------------------------------------------------------
@@ -201,7 +231,7 @@ class Workflows(unittest.TestCase):
             self.assertTrue(all(b == common[0] for b in common))
         start_run(output, planned, prepared, self.config, True)
         self.assertTrue(execute(planned, prepared, self.config, client, output, cache))
-        self.assertEqual(len(client.calls), 45)              # resume: nothing sent again
+        self.assertEqual(len(client.calls), 45)  # resume: nothing sent again
         with self.assertRaisesRegex(ValueError, "changed"):
             start_run(output, planned, prepared, {**self.config, "pdf_detail": "high"}, True)
 
@@ -214,29 +244,39 @@ class Workflows(unittest.TestCase):
         self.assertTrue((out_dir / "scores" / "summary.json").is_file())
         pages = report(output, out_dir)
         self.assertTrue(all(p.exists() for p in pages))
-        self.assertNotIn("full_pdf", pages[1].read_text(encoding="utf-8"))   # blind review
+        self.assertNotIn("full_pdf", pages[1].read_text(encoding="utf-8"))  # blind review
         self.assertIn("Evaluation summary", pages[0].read_text(encoding="utf-8"))
 
         tables = export_run(output)
-        self.assertEqual(len(tables["results"]), 9)          # 3 reports x 3 methods x 1 result
+        self.assertEqual(len(tables["results"]), 9)  # 3 reports x 3 methods x 1 result
         self.assertEqual(len(tables["projects"]), 9)
         exports = output / "exports"
         self.assertEqual(
             sorted(p.relative_to(exports).as_posix() for p in exports.rglob("*.csv")),
-            sorted(["results.csv", "projects.csv"]
-                   + [f"paper{i}/{f}.csv" for i in (1, 2, 3) for f in ("facts", "results", "projects")]),
+            sorted(
+                ["results.csv", "projects.csv"]
+                + [
+                    f"paper{i}/{f}.csv"
+                    for i in (1, 2, 3)
+                    for f in ("facts", "results", "projects")
+                ]
+            ),
         )
-        self.assertFalse(list(exports.rglob("*.json")))      # no JSON copies, no R-style tables
+        self.assertFalse(list(exports.rglob("*.json")))  # no JSON copies, no R-style tables
         facts = (exports / "paper1" / "facts.csv").read_text(encoding="utf-8-sig")
-        self.assertIn("project_title", facts)                # every task's facts, not just results
-        hybrid = next(r for r in tables["results"] if r["method"] == "hybrid" and r["project_code"] == "D1")
+        self.assertIn("project_title", facts)  # every task's facts, not just results
+        hybrid = next(
+            r for r in tables["results"] if r["method"] == "hybrid" and r["project_code"] == "D1"
+        )
         self.assertEqual((hybrid["chunk_id"], hybrid["section"]), ("paper1_c0001", "annex"))
 
     def test_inputs_come_from_parsed_sections_and_step03_chunks(self) -> None:
         """full_parsed reads sections.json, hybrid reads chunks.jsonl; bad inputs are refused."""
         document = prepare_document(self.doc)
         self.assertEqual(len(document["blocks"]), 1)
-        self.assertEqual([c["id"] for c in document["chunks"]], ["paper1_c0000", "paper1_c0001", "paper1_c0002"])
+        self.assertEqual(
+            [c["id"] for c in document["chunks"]], ["paper1_c0000", "paper1_c0001", "paper1_c0002"]
+        )
         self.assertEqual(document["chunks"][1]["section_kind"], "annex")
         self.assertTrue(document["chunks"][1]["search_text"].startswith("Document: paper1"))
         self.assertEqual(set(document["source_hashes"]), {"pdf", "sections", "chunks"})
@@ -246,7 +286,9 @@ class Workflows(unittest.TestCase):
         self.assertIn("12.5 hectares restored", full_text(document))
 
         # Selection by project code or paper id; unknown names and missing/partial inputs fail.
-        self.assertEqual([d["id"] for d in load_manifest(self.manifest, ["paper2", "D3"])], ["D2", "D3"])
+        self.assertEqual(
+            [d["id"] for d in load_manifest(self.manifest, ["paper2", "D3"])], ["D2", "D3"]
+        )
         with self.assertRaisesRegex(ValueError, "Not in the manifest"):
             load_manifest(self.manifest, ["H001"])
         (self.directory / "chunks" / "paper2" / "chunks.jsonl").unlink()
@@ -260,25 +302,72 @@ class Workflows(unittest.TestCase):
     def test_typed_parser_evidence_gaps_and_frozen_inputs(self) -> None:
         """Typed blocks and gap diagnostics; a run refuses changed inputs; preflight blocks big requests."""
         sections = self.directory / "parsed" / "paper1" / "sections.json"
-        write_json(sections, {"sections": [{
-            "heading": "Results", "heading_path": ["Findings", "Results"], "pages": [1, 3],
-            "content": [
-                {"type": "text", "text": "12.5 hectares restored", "pages": [2, 2]},
-                {"type": "table", "title": "Actuals", "header": [["Area", "Actual"]],
-                 "rows": [["Restored", "12.5"]], "pages": [2, 2], "suspect": ["check cells"]},
-                {"type": "footnote", "text": "1 Area measured after completion.", "page": 2},
-                {"type": "figure", "caption": "Land restored", "labels": "12.5 ha",
-                 "image": "figures/chart.png", "text": "", "pages": [2, 2]},
-                {"type": "figure", "caption": None, "labels": "", "image": "figures/scan.png",
-                 "text": "Figure: (no caption)", "pages": [3, 3]},
-                {"type": "table", "text": "", "header": [], "rows": [], "title": None, "pages": [3, 3]},
-            ],
-        }]})
+        write_json(
+            sections,
+            {
+                "sections": [
+                    {
+                        "heading": "Results",
+                        "heading_path": ["Findings", "Results"],
+                        "pages": [1, 3],
+                        "content": [
+                            {"type": "text", "text": "12.5 hectares restored", "pages": [2, 2]},
+                            {
+                                "type": "table",
+                                "title": "Actuals",
+                                "header": [["Area", "Actual"]],
+                                "rows": [["Restored", "12.5"]],
+                                "pages": [2, 2],
+                                "suspect": ["check cells"],
+                            },
+                            {
+                                "type": "footnote",
+                                "text": "1 Area measured after completion.",
+                                "page": 2,
+                            },
+                            {
+                                "type": "figure",
+                                "caption": "Land restored",
+                                "labels": "12.5 ha",
+                                "image": "figures/chart.png",
+                                "text": "",
+                                "pages": [2, 2],
+                            },
+                            {
+                                "type": "figure",
+                                "caption": None,
+                                "labels": "",
+                                "image": "figures/scan.png",
+                                "text": "Figure: (no caption)",
+                                "pages": [3, 3],
+                            },
+                            {
+                                "type": "table",
+                                "text": "",
+                                "header": [],
+                                "rows": [],
+                                "title": None,
+                                "pages": [3, 3],
+                            },
+                        ],
+                    }
+                ]
+            },
+        )
         meta = sections.parent / "meta.json"
-        write_json(meta, {"source_file": "paper1.pdf", "page_range": None, "fixes": {"pages_without_text": [3]}})
+        write_json(
+            meta,
+            {
+                "source_file": "paper1.pdf",
+                "page_range": None,
+                "fixes": {"pages_without_text": [3]},
+            },
+        )
         document = prepare_document(self.doc)
-        self.assertEqual([b["type"] for b in document["blocks"]],
-                         ["text", "table", "footnote", "figure", "figure", "table"])
+        self.assertEqual(
+            [b["type"] for b in document["blocks"]],
+            ["text", "table", "footnote", "figure", "figure", "table"],
+        )
         self.assertEqual(document["diagnostics"]["figures_without_text"], 1)
         self.assertEqual(document["diagnostics"]["tables_without_text"], 1)
         self.assertEqual(document["diagnostics"]["parser_pages_without_text"], [3])
@@ -292,9 +381,17 @@ class Workflows(unittest.TestCase):
         start_run(output, planned, {"D1": document}, self.config, False)
         for changed in ({"family": "agency_evaluation"}, {"focus": "A subproject"}):
             with self.assertRaisesRegex(ValueError, "changed"):
-                start_run(output, planned, {"D1": prepare_document({**self.doc, **changed})}, self.config, True)
-        self.write_chunks("paper1", [chunk_line("paper1", 0, "12.5 hectares restored, rechunked", [2, 2])])
-        with self.assertRaisesRegex(ValueError, "changed"):          # new chunks = new run
+                start_run(
+                    output,
+                    planned,
+                    {"D1": prepare_document({**self.doc, **changed})},
+                    self.config,
+                    True,
+                )
+        self.write_chunks(
+            "paper1", [chunk_line("paper1", 0, "12.5 hectares restored, rechunked", [2, 2])]
+        )
+        with self.assertRaisesRegex(ValueError, "changed"):  # new chunks = new run
             start_run(output, planned, {"D1": prepare_document(self.doc)}, self.config, True)
 
         preview = dry_plan([self.doc], planned, {"D1": document}, [], self.config)
@@ -319,33 +416,54 @@ class Workflows(unittest.TestCase):
         planned = jobs(self.docs, list(METHODS), ["results"], 1)
         output = self.directory / "template"
         start_run(output, planned, prepared, self.config, False)
-        actual = result_fact(baseline_stated="0", target_stated="90", reporting_year="2019",
-                             location_stated="project-wide")
+        actual = result_fact(
+            baseline_stated="0",
+            target_stated="90",
+            reporting_year="2019",
+            location_stated="project-wide",
+        )
         bounded = {**actual, "value": "", "value_stated": ">12.5"}
         zero = {**actual, "value": "0", "value_stated": "0", "scope": "one district"}
         for job in planned:
             if job["document"] == "D3":
-                write_json(output / job["path"] / "result.json", {"status": "failed", "error": "test failure"})
+                write_json(
+                    output / job["path"] / "result.json",
+                    {"status": "failed", "error": "test failure"},
+                )
                 continue
             facts = [actual, actual, bounded, zero] if job["document"] == "D1" else []
-            write_json(output / job["path"] / "result.json",
-                       {"status": "completed", "answer": {"facts": facts, "notes": ""}})
-            write_json(output / job["path"] / "packet.json",
-                       {"selected": [c["id"] for c in prepared[job["document"]]["chunks"]]})
+            write_json(
+                output / job["path"] / "result.json",
+                {"status": "completed", "answer": {"facts": facts, "notes": ""}},
+            )
+            write_json(
+                output / job["path"] / "packet.json",
+                {"selected": [c["id"] for c in prepared[job["document"]]["chunks"]]},
+            )
         tables = export_run(output)
         rows = tables["results"]
-        self.assertEqual(len(rows), 9)                       # 3 unique claims x 3 methods
-        self.assertEqual(len(tables["facts"]), 12)           # 4 raw facts x 3 methods
+        self.assertEqual(len(rows), 9)  # 3 unique claims x 3 methods
+        self.assertEqual(len(tables["facts"]), 12)  # 4 raw facts x 3 methods
         plain = next(r for r in rows if r["value_stated"] == "12.5" and r["method"] == "hybrid")
-        self.assertEqual((plain["value"], plain["baseline"], plain["target"], plain["year"]), (12.5, 0, 90, 2019))
-        self.assertEqual((plain["unit"], plain["duplicates_merged"], plain["verified"]), ("hectares", 1, True))
-        self.assertEqual((plain["chunk_id"], plain["page_cited"], plain["page_repaired"]), ("paper1_c0001", "2", False))
-        self.assertTrue(plain["needs_review"])               # conflicts with the >12.5 claim
+        self.assertEqual(
+            (plain["value"], plain["baseline"], plain["target"], plain["year"]),
+            (12.5, 0, 90, 2019),
+        )
+        self.assertEqual(
+            (plain["unit"], plain["duplicates_merged"], plain["verified"]), ("hectares", 1, True)
+        )
+        self.assertEqual(
+            (plain["chunk_id"], plain["page_cited"], plain["page_repaired"]),
+            ("paper1_c0001", "2", False),
+        )
+        self.assertTrue(plain["needs_review"])  # conflicts with the >12.5 claim
         self.assertTrue(all(r["value"] is None for r in rows if r["value_stated"] == ">12.5"))
         self.assertTrue(all(r["value"] == 0 for r in rows if r["value_stated"] == "0"))
         self.assertTrue(all(not r["chunk_id"] for r in rows if r["method"] != "hybrid"))
         for project in tables["projects"]:
-            expected = {"D1": (3, "completed"), "D2": (0, "completed"), "D3": (0, "failed")}[project["project_code"]]
+            expected = {"D1": (3, "completed"), "D2": (0, "completed"), "D3": (0, "failed")}[
+                project["project_code"]
+            ]
             self.assertEqual((project["results_exported"], project["results_status"]), expected)
         for paper in ("paper1", "paper2", "paper3"):
             self.assertTrue((output / "exports" / paper / "results.csv").is_file())
@@ -356,7 +474,9 @@ class Workflows(unittest.TestCase):
         write_json(path, result)
         tables = export_run(output)
         self.assertEqual(identifiers, {r["result_id"] for r in tables["results"]})
-        self.assertEqual(export_xlsx(output, tables["results"], tables["projects"]).name, "results.xlsx")
+        self.assertEqual(
+            export_xlsx(output, tables["results"], tables["projects"]).name, "results.xlsx"
+        )
 
     def test_page_repair_is_recorded(self) -> None:
         """A wrong page moves only to the one page holding quote + value, and the move is visible."""
@@ -365,20 +485,36 @@ class Workflows(unittest.TestCase):
         output = self.directory / "pages"
         start_run(output, planned, prepared, self.config, False)
         wrong_page = result_fact(evidence=[{"quote": "12.5 hectares restored", "pages": [3]}])
-        unsupported = result_fact(value="7", value_stated="7", metric="other land",
-                                  evidence=[{"quote": "seven hectares restored", "pages": [3]}])
+        unsupported = result_fact(
+            value="7",
+            value_stated="7",
+            metric="other land",
+            evidence=[{"quote": "seven hectares restored", "pages": [3]}],
+        )
         for job in planned:
-            write_json(output / job["path"] / "result.json",
-                       {"status": "completed", "answer": {"facts": [wrong_page, unsupported], "notes": ""}})
-            write_json(output / job["path"] / "packet.json", {"text": "", "selected": ["paper1_c0001"]})
+            write_json(
+                output / job["path"] / "result.json",
+                {
+                    "status": "completed",
+                    "answer": {"facts": [wrong_page, unsupported], "notes": ""},
+                },
+            )
+            write_json(
+                output / job["path"] / "packet.json", {"text": "", "selected": ["paper1_c0001"]}
+            )
         rows = export_run(output)["results"]
         moved = next(r for r in rows if r["value_stated"] == "12.5" and r["method"] == "hybrid")
-        self.assertEqual((moved["page_cited"], moved["page"], moved["page_repaired"], moved["verified"]), ("3", 2, True, True))
+        self.assertEqual(
+            (moved["page_cited"], moved["page"], moved["page_repaired"], moved["verified"]),
+            ("3", 2, True, True),
+        )
         self.assertEqual(moved["chunk_id"], "paper1_c0001")  # the chunk link survives the repair
-        self.assertFalse(moved["needs_review"])              # a repaired page is a note, not a problem
+        self.assertFalse(moved["needs_review"])  # a repaired page is a note, not a problem
         self.assertIn("note: cited page [3]", moved["review_details"])
         missing = next(r for r in rows if r["value_stated"] == "7")
-        self.assertEqual((missing["page"], missing["verified"], missing["page_repaired"]), (3, False, False))
+        self.assertEqual(
+            (missing["page"], missing["verified"], missing["page_repaired"]), (3, False, False)
+        )
         self.assertTrue(missing["needs_review"])
 
         hyphenated = self.directory / "hyphen.pdf"
@@ -389,32 +525,62 @@ class Workflows(unittest.TestCase):
 
     def test_labelled_values_and_review_flags(self) -> None:
         """Context and milestone rows are kept with their value_type; only real problems need review."""
-        doc = self.make_report("D4", "paper4", extra_page="Plan adopted: Yes")   # page 4
+        doc = self.make_report("D4", "paper4", extra_page="Plan adopted: Yes")  # page 4
         planned = jobs([doc], ["full_parsed"], ["results"], 1)
         prepared, _ = prepare([doc])
         output = self.directory / "labels"
         start_run(output, planned, prepared, self.config, False)
         facts = [
-            result_fact(metric="a brand new metric"),                       # vocabulary note only
-            result_fact(value="90", value_stated="90", metric="target area", value_type="context",
-                        evidence=[{"quote": "Target: 90 hectares.", "pages": [3]}]),
-            result_fact(value="", value_stated="Yes", metric="plan adopted", value_type="milestone",
-                        evidence=[{"quote": "Plan adopted: Yes", "pages": [4]}]),
+            result_fact(metric="a brand new metric"),  # vocabulary note only
+            result_fact(
+                value="90",
+                value_stated="90",
+                metric="target area",
+                value_type="context",
+                evidence=[{"quote": "Target: 90 hectares.", "pages": [3]}],
+            ),
+            result_fact(
+                value="",
+                value_stated="Yes",
+                metric="plan adopted",
+                value_type="milestone",
+                evidence=[{"quote": "Plan adopted: Yes", "pages": [4]}],
+            ),
             # "Yes" is printed on page 4, but this quote isn't: a wordy value alone doesn't verify.
-            result_fact(value="", value_stated="Yes", metric="unsupported milestone", value_type="milestone",
-                        evidence=[{"quote": "this sentence is not in the report", "pages": [4]}]),
+            result_fact(
+                value="",
+                value_stated="Yes",
+                metric="unsupported milestone",
+                value_type="milestone",
+                evidence=[{"quote": "this sentence is not in the report", "pages": [4]}],
+            ),
             result_fact(value="12.5", value_stated="12.5", metric="a target", value_type="target"),
         ]
-        write_json(output / planned[0]["path"] / "result.json",
-                   {"status": "completed", "answer": {"facts": facts, "notes": ""}})
+        write_json(
+            output / planned[0]["path"] / "result.json",
+            {"status": "completed", "answer": {"facts": facts, "notes": ""}},
+        )
         write_json(output / planned[0]["path"] / "packet.json", {"text": ""})
         rows = {r["metric_stated"]: r for r in export_run(output)["results"]}
         self.assertFalse(rows["a brand new metric"]["needs_review"])
         self.assertIn("note: new metric", rows["a brand new metric"]["review_details"])
-        self.assertEqual((rows["target area"]["value_type"], rows["target area"]["needs_review"]), ("context", False))
-        self.assertEqual((rows["plan adopted"]["verified"], rows["plan adopted"]["needs_review"]), (True, False))
-        self.assertEqual((rows["unsupported milestone"]["verified"], rows["unsupported milestone"]["needs_review"]), (False, True))
-        self.assertTrue(rows["a target"]["needs_review"])   # a target exported as a result is a problem
+        self.assertEqual(
+            (rows["target area"]["value_type"], rows["target area"]["needs_review"]),
+            ("context", False),
+        )
+        self.assertEqual(
+            (rows["plan adopted"]["verified"], rows["plan adopted"]["needs_review"]), (True, False)
+        )
+        self.assertEqual(
+            (
+                rows["unsupported milestone"]["verified"],
+                rows["unsupported milestone"]["needs_review"],
+            ),
+            (False, True),
+        )
+        self.assertTrue(
+            rows["a target"]["needs_review"]
+        )  # a target exported as a result is a problem
         self.assertIn("not_actual_result", rows["a target"]["review_details"])
 
     def test_embedding_cache_is_one_file_and_survives_a_crash(self) -> None:
@@ -442,19 +608,40 @@ class Workflows(unittest.TestCase):
             self.assertEqual(len(saved["keys"]), first.sent)
         second = Flaky(fail_on=0)
         matrix = embeddings(texts, second, path, config)
-        self.assertEqual((matrix.shape, second.sent, first.sent + second.sent), ((100, 8), 36, 100))
+        self.assertEqual(
+            (matrix.shape, second.sent, first.sent + second.sent), ((100, 8), 36, 100)
+        )
         third = Flaky(fail_on=0)
         embeddings(texts, third, path, config)
         self.assertEqual(third.sent, 0)
         self.assertEqual([p.name for p in path.parent.iterdir()], ["D1.npz"])
 
+        # A damaged cache must fail before an unnecessary paid request can be made.
+        with path.open("wb") as stream:
+            np.savez(stream, keys=np.array(["orphan-key"]), vectors=np.ones((2, 8)))
+        with self.assertRaises(ValueError):
+            embeddings(texts, third, path, config)
+        self.assertEqual(third.sent, 0)
+
     def test_chunker_marks_pages_inside_split_tables(self) -> None:
         """A table crossing a page break gets a (PDF page N) row and exact pages per piece."""
         rows = [[f"Indicator {i}", str(i)] for i in range(6)]
-        item = {"type": "table", "title": "Results", "header": [["Indicator", "Actual"]],
-                "rows": rows, "row_pages": [55, 55, 55, 56, 56, 56], "pages": [55, 56]}
-        settings = {"target_tokens": 450, "max_tokens": 600, "min_tokens": 100,
-                    "max_table_tokens": 1500, "footnote_cap": 150, "header_min_pages": 3}
+        item = {
+            "type": "table",
+            "title": "Results",
+            "header": [["Indicator", "Actual"]],
+            "rows": rows,
+            "row_pages": [55, 55, 55, 56, 56, 56],
+            "pages": [55, 56],
+        }
+        settings = {
+            "target_tokens": 450,
+            "max_tokens": 600,
+            "min_tokens": 100,
+            "max_table_tokens": 1500,
+            "footnote_cap": 150,
+            "header_min_pages": 3,
+        }
         chunker = PaperChunker("P", "P", lambda text: len(text.split()), settings)
         chunker.add_table(item, None)
         text = chunker.chunks[0]["text"]
@@ -463,8 +650,10 @@ class Workflows(unittest.TestCase):
         self.assertLess(text.index("(PDF page 56)"), text.index("Indicator 3"))
         self.assertEqual(chunker.chunks[0]["pages"], [55, 56])
 
-        small = PaperChunker("P", "P", lambda text: len(text.split()), {**settings, "max_table_tokens": 12})
-        small.add_table(item, None)                          # forced to split into pieces
+        small = PaperChunker(
+            "P", "P", lambda text: len(text.split()), {**settings, "max_table_tokens": 12}
+        )
+        small.add_table(item, None)  # forced to split into pieces
         self.assertEqual(small.chunks[0]["pages"], [55, 55])
         self.assertEqual(small.chunks[-1]["pages"], [56, 56])
         old = PaperChunker("P", "P", lambda text: len(text.split()), settings)
@@ -472,38 +661,66 @@ class Workflows(unittest.TestCase):
         self.assertNotIn("(PDF page", old.chunks[0]["text"])  # older sections.json still works
         self.assertEqual(old.chunks[0]["pages"], [55, 56])
 
+        # Incomplete page metadata must not silently discard the final table row.
+        with self.assertRaises(ValueError):
+            old.add_table({**item, "row_pages": item["row_pages"][:-1]}, None)
+
     def test_table_row_quotes_and_compare_rules(self) -> None:
         """A table row quote passes when its label and cells are on the page, even read column by
         column; compare reads '10 000' as one number and matches Yes/No only with the metric."""
         table_pdf = self.directory / "table.pdf"
-        with pymupdf.open() as pdf:   # the text layer lists values, then dates, like World Bank ICRs
-            pdf.new_page().insert_text((72, 72), "Technologies generated\nNumber\n0.00\n115.00\n175.00\n"
-                                                 "14-Mar-2013\n14-Mar-2013\n31-Jan-2020")
+        with (
+            pymupdf.open() as pdf
+        ):  # the text layer lists values, then dates, like World Bank ICRs
+            pdf.new_page().insert_text(
+                (72, 72),
+                "Technologies generated\nNumber\n0.00\n115.00\n175.00\n"
+                "14-Mar-2013\n14-Mar-2013\n31-Jan-2020",
+            )
             pdf.save(table_pdf)
         pages = pdf_pages(table_pdf)
         row = "| Technologies generated | Number | 0.00 14-Mar-2013 | 115.00 14-Mar-2013 |  | 175.00 31-Jan-2020 |"
         self.assertEqual(check_quote({"quote": row, "pages": [1]}, pages), "table_cells")
         wrong_label = row.replace("Technologies generated", "Farmers trained daily")
-        self.assertEqual(check_quote({"quote": wrong_label, "pages": [1]}, pages), "not_found_needs_review")
-        self.assertEqual(check_quote({"quote": row.replace("175.00", "999.00"), "pages": [1]}, pages),
-                         "not_found_needs_review")
+        self.assertEqual(
+            check_quote({"quote": wrong_label, "pages": [1]}, pages), "not_found_needs_review"
+        )
+        self.assertEqual(
+            check_quote({"quote": row.replace("175.00", "999.00"), "pages": [1]}, pages),
+            "not_found_needs_review",
+        )
 
         self.assertEqual(numbers("nearly ten thousand (10 000)"), {10000.0})
         self.assertEqual(numbers("in 10 2019 surveys"), {10.0, 2019.0})
         self.assertEqual(numbers("379,162.00 and >1000"), {379162.0, 1000.0})
-        self.assertTrue(is_match("N", "SLM Knowledge Platform up and running", "N", "SLM Knowledge Platform operational"))
-        self.assertFalse(is_match("N", "SLM Knowledge Platform up and running", "N", "Communication strategy updated"))
+        self.assertTrue(
+            is_match(
+                "N",
+                "SLM Knowledge Platform up and running",
+                "N",
+                "SLM Knowledge Platform operational",
+            )
+        )
+        self.assertFalse(
+            is_match(
+                "N", "SLM Knowledge Platform up and running", "N", "Communication strategy updated"
+            )
+        )
         self.assertTrue(is_match("10000", "farmers who benefited", "10 000", "farm managers"))
 
-        notes = ("Document notes: target revised. | further results: 175 Technologies generated "
-                 "(Regional (all crops), p39); 35; 26; 44 contracts by type (breakdown; goods, p12); "
-                 "nearly 3,000 km of roads (rural, p8) | funding_mechanism_portion recoded")
+        notes = (
+            "Document notes: target revised. | further results: 175 Technologies generated "
+            "(Regional (all crops), p39); 35; 26; 44 contracts by type (breakdown; goods, p12); "
+            "nearly 3,000 km of roads (rural, p8) | funding_mechanism_portion recoded"
+        )
         self.assertEqual([v for v, _ in note_results(notes)], ["175", "35", "3,000"])
         self.assertEqual(note_results("no further results here"), [])
 
     def test_budget_and_uncertain_charges_stop_requests(self) -> None:
         """Block overspending and prevent automatic resends after ambiguous timeouts."""
-        client = Client(self.config, self.directory / "api-run", self.directory / "cache", "fake-key")
+        client = Client(
+            self.config, self.directory / "api-run", self.directory / "cache", "fake-key"
+        )
         client.session.post = Mock()
         with self.assertRaises(BudgetError):
             client.request("responses", 6, "test", json={})

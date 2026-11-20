@@ -4,9 +4,17 @@ from collections import defaultdict
 from pathlib import Path
 
 from step04_extract.api import usage_cost
-from step04_extract.files import contains, file_hash, fingerprint, norm, read_json, write_csv, write_json
-from step04_extract.rules import content_flags, fact_flags, number, scoring_fact
 from step04_extract.evidence import check_quote, evidence_covered, pdf_pages, prediction_id
+from step04_extract.files import (
+    contains,
+    file_hash,
+    fingerprint,
+    norm,
+    read_json,
+    write_csv,
+    write_json,
+)
+from step04_extract.rules import content_flags, fact_flags, number, scoring_fact
 
 
 def equivalent(got: str, accepted: list[str]) -> bool:
@@ -407,7 +415,8 @@ def summarize(rows: list[dict]) -> list[dict]:
                 if populated
                 else None,
                 "recorded_citation_verification_rate": sum(
-                    c in ("exact", "normalized", "joined_passages", "table_cells") for c in recorded
+                    c in ("exact", "normalized", "joined_passages", "table_cells")
+                    for c in recorded
                 )
                 / len(recorded)
                 if recorded

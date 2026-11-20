@@ -8,11 +8,19 @@ from pathlib import Path
 import jsonschema
 
 from step04_extract.api import BudgetError, Client
-from step04_extract.files import CONFIG, HERE, file_hash, fingerprint, read_json, tokens, write_json
+from step04_extract.files import (
+    CONFIG,
+    HERE,
+    file_hash,
+    fingerprint,
+    read_json,
+    tokens,
+    write_json,
+)
 from step04_extract.inputs import full_text, prepare_document
+from step04_extract.retrieval import retrieve
 from step04_extract.rules import fact_flags, headline
 from step04_extract.tasks import FIELDS, SYSTEM, VERSION, response_schema, task_text
-from step04_extract.retrieval import retrieve
 
 
 def jobs(documents: list[dict], methods: list[str], groups: list[str], repeats: int) -> list[dict]:
@@ -126,8 +134,7 @@ def start_run(
     """Freeze input/config/code hashes so a resume cannot silently mix different experiments."""
     code = {p.name: file_hash(p) for p in sorted(HERE.glob("*.py"))}
     template_hashes = {
-        name: file_hash(CONFIG / name)
-        for name in ("results_schema.json", "results_template.xlsx")
+        name: file_hash(CONFIG / name) for name in ("results_schema.json", "results_template.xlsx")
     }
     signature = fingerprint(
         {

@@ -15,30 +15,41 @@ Reading your docling.json showed that most of the table problems are export prob
 This module only uses plain dicts (json.load of docling.json), so it needs no Docling install and can be
 re-run in seconds on saved files (see `python parse.py --reprocess`).
 """
+
 import difflib
 import re
 from collections import Counter
+from pathlib import Path
 
 import ftfy
 
 # ---- thresholds (points; a US-letter page is 612 x 792) ----
-MARGIN_PT = 30         # text lying entirely inside this outer strip is a margin stamp, not content
-TOP_ZONE_PT = 110      # a table starting within this distance of the page top "starts at the top"
-BOTTOM_ZONE_FRAC = 0.2 # a table whose lowest text is within this fraction of page height of the bottom "ends at the bottom"
+MARGIN_PT = 30  # text lying entirely inside this outer strip is a margin stamp, not content
+TOP_ZONE_PT = 110  # a table starting within this distance of the page top "starts at the top"
+BOTTOM_ZONE_FRAC = 0.2  # a table whose lowest text is within this fraction of page height of the bottom "ends at the bottom"
 
 # --------------------------------------------------------------------------
 # Text cleaning (carried over from json_editor.py)
 # --------------------------------------------------------------------------
 LIGATURES = {
-    "/uniFB01": "fi", "/uniFB02": "fl", "/uniFB00": "ff", "/uniFB03": "ffi",
-    "/C0": "-", "/C6": "+-", "/C1": "·", "/C2": "x", "/C211": "@",
-    "/C24": "~", "/C21": ">", "/C3": "*",
+    "/uniFB01": "fi",
+    "/uniFB02": "fl",
+    "/uniFB00": "ff",
+    "/uniFB03": "ffi",
+    "/C0": "-",
+    "/C6": "+-",
+    "/C1": "·",
+    "/C2": "x",
+    "/C211": "@",
+    "/C24": "~",
+    "/C21": ">",
+    "/C3": "*",
 }
 GENERAL = {
     "\n": " ",
-    "\u2013": "-",   # en dash -> hyphen
-    "\u0002": "|",   # control char sometimes used as a pipe-like delimiter
-    "\u0003": "",    # stray control char
+    "\u2013": "-",  # en dash -> hyphen
+    "\u0002": "|",  # control char sometimes used as a pipe-like delimiter
+    "\u0003": "",  # stray control char
 }
 
 
@@ -46,7 +57,7 @@ GENERAL = {
 # not real characters (they show as boxes or nothing), so we map the common bullet glyphs to a real bullet.
 # We map only known bullets, not the whole range: other glyphs in that range can be real letters from a
 # symbol font (U+F061 is a Greek alpha in Symbol), and silently deleting those would lose content.
-PRIVATE_USE_BULLETS = "\uf0b7\uf0a7\uf0d8\uf076\uf06e"   # written as escapes on purpose: the raw characters are invisible in editors
+PRIVATE_USE_BULLETS = "\uf0b7\uf0a7\uf0d8\uf076\uf06e"  # written as escapes on purpose: the raw characters are invisible in editors
 
 
 def clean_text(text: str) -> str:
@@ -78,6 +89,7 @@ def iter_blocks(doc: dict):
     picture is still yielded as a table. A table's own children are its footnotes; those are read via
     table["footnotes"] instead.
     """
+
     def walk(children):
         for ref in children:
             coll, item = resolve(doc, ref)
@@ -91,6 +103,7 @@ def iter_blocks(doc: dict):
                 yield from walk(item.get("children", []))
             elif coll == "tables":
                 yield ("table", item)
+
     yield from walk(doc["body"]["children"])
 
 
@@ -124,9 +137,11 @@ def is_margin_stamp(doc: dict, item: dict) -> bool:
     return bb["r"] < MARGIN_PT or bb["l"] > width - MARGIN_PT
 
 
-EDGE_TOP_FRAC = 0.12     # running headers sit in the top 12% of the page...
+EDGE_TOP_FRAC = 0.12  # running headers sit in the top 12% of the page...
 EDGE_BOTTOM_FRAC = 0.10  # ...and running footers / page numbers in the bottom 10%
-PAGE_NUMBER_RE = re.compile(r"(page\s+)?[#ivxlc]{1,6}(\s*(of|/)\s*#)?", re.I)   # matched against repeat_key()
+PAGE_NUMBER_RE = re.compile(
+    r"(page\s+)?[#ivxlc]{1,6}(\s*(of|/)\s*#)?", re.I
+)  # matched against repeat_key()
 
 
 def repeat_key(text: str) -> str:
@@ -138,7 +153,10 @@ def furniture_keys(doc: dict) -> set:
     """Keys of every text Docling marked as a page header/footer somewhere in this document."""
     keys = set()
     for t in doc["texts"]:
-        if t.get("content_layer") == "furniture" or t.get("label") in ("page_header", "page_footer"):
+        if t.get("content_layer") == "furniture" or t.get("label") in (
+            "page_header",
+            "page_footer",
+        ):
             k = repeat_key(t.get("text", ""))
             if len(re.sub(r"\W", "", k)) >= 3:
                 keys.add(k)
@@ -179,7 +197,11 @@ def render_text(doc: dict, item: dict, stats: Counter, furn: set | None = None):
     if item.get("content_layer") == "furniture" or label in ("page_header", "page_footer"):
         stats["furniture_dropped"] += 1
         return None
-    if furn is not None and label in ("text", "section_header", "title") and is_missed_furniture(doc, item, furn):
+    if (
+        furn is not None
+        and label in ("text", "section_header", "title")
+        and is_missed_furniture(doc, item, furn)
+    ):
         stats["running_headers_dropped"] += 1
         return None
     text = clean_text(item.get("text", ""))
@@ -194,7 +216,12 @@ def render_text(doc: dict, item: dict, stats: Counter, furn: set | None = None):
         prov = item.get("prov") or []
         stats["headings_demoted_long"] += 1
         stats.setdefault("demoted_heading_list", []).append(
-            {"page": prov[0]["page_no"] if prov else None, "chars": len(text), "preview": text[:80]})
+            {
+                "page": prov[0]["page_no"] if prov else None,
+                "chars": len(text),
+                "preview": text[:80],
+            }
+        )
         return ("text", 0, text)
     if label == "title":
         return ("heading", 1, text)
@@ -205,7 +232,7 @@ def render_text(doc: dict, item: dict, stats: Counter, furn: set | None = None):
         # Some PDFs keep the bullet glyph inside the item text; we add our own "- ", so drop theirs.
         return ("text", 0, "- " + text.lstrip("\u2022 ").strip())
     if label == "footnote":
-        return None   # footnotes are collected from the whole document by collect_footnotes()
+        return None  # footnotes are collected from the whole document by collect_footnotes()
     return ("text", 0, text)
 
 
@@ -214,8 +241,10 @@ def render_text(doc: dict, item: dict, stats: Counter, furn: set | None = None):
 # --------------------------------------------------------------------------
 # A footnote starts with a marker: a number ("1 There were..."), a symbol, or "(a)".
 FOOTNOTE_MARKER_RE = re.compile(r"^\s*(\d{1,3}|[*†‡§¶#]+|\(\w{1,3}\)|\[\w{1,3}\])(\s|[.):])")
-MAX_HEADING_CHARS = 200   # a real heading is a short line; anything longer is body text the layout model mislabelled
-CONTINUATION_GAP = 0.5   # a line starting less than 0.5 line-heights below the previous one is the same footnote
+MAX_HEADING_CHARS = 200  # a real heading is a short line; anything longer is body text the layout model mislabelled
+CONTINUATION_GAP = (
+    0.5  # a line starting less than 0.5 line-heights below the previous one is the same footnote
+)
 
 
 def collect_footnotes(doc: dict, stats: Counter) -> list:
@@ -234,7 +263,11 @@ def collect_footnotes(doc: dict, stats: Counter) -> list:
     """
     items = []
     for t in doc["texts"]:
-        if t.get("label") != "footnote" or t.get("content_layer") == "furniture" or not t.get("prov"):
+        if (
+            t.get("label") != "footnote"
+            or t.get("content_layer") == "furniture"
+            or not t.get("prov")
+        ):
             continue
         text = clean_text(t.get("text", ""))
         if not text or is_margin_stamp(doc, t):
@@ -255,10 +288,35 @@ def collect_footnotes(doc: dict, stats: Counter) -> list:
                 prev["bottom"], prev["bottom_h"] = it["bottom"], it["top"] - it["bottom"]
                 stats["footnote_pieces_merged"] += 1
                 continue
-        notes.append({"page": it["page"], "text": it["text"], "bottom": it["bottom"],
-                      "bottom_h": it["top"] - it["bottom"]})
+        notes.append(
+            {
+                "page": it["page"],
+                "text": it["text"],
+                "bottom": it["bottom"],
+                "bottom_h": it["top"] - it["bottom"],
+            }
+        )
     stats["footnotes_kept"] += len(notes)
     return [{"page": n["page"], "text": n["text"]} for n in notes]
+
+
+def block_covers_page(b: dict, p: int) -> bool:
+    """Check whether a block covers the physical PDF page."""
+    a, z = b["pages"]
+    return a is not None and a <= p <= (z if z is not None else a)
+
+
+def footnote_section(blocks: list, sec_of: list[int], p: int) -> int:
+    """Choose the last section with prose, content or a start before the footnote."""
+    for test in (
+        lambda b: b["kind"] == "text" and block_covers_page(b, p),
+        lambda b: b["kind"] != "heading" and block_covers_page(b, p),
+        lambda b: b["pages"][0] is not None and b["pages"][0] <= p,
+    ):
+        hits = [sec_of[i] for i, b in enumerate(blocks) if test(b)]
+        if hits:
+            return max(hits)
+    return sec_of[-1] if sec_of else 0
 
 
 def place_footnotes(blocks: list, notes: list) -> list:
@@ -278,22 +336,9 @@ def place_footnotes(blocks: list, notes: list) -> list:
             sid += 1
         sec_of.append(sid)
 
-    def covers(b, p):
-        a, z = b["pages"]
-        return a is not None and a <= p <= (z if z is not None else a)
-
-    def pick(p):
-        for test in (lambda b: b["kind"] == "text" and covers(b, p),
-                     lambda b: b["kind"] != "heading" and covers(b, p),
-                     lambda b: b["pages"][0] is not None and b["pages"][0] <= p):
-            hits = [sec_of[i] for i, b in enumerate(blocks) if test(b)]
-            if hits:
-                return max(hits)
-        return sec_of[-1] if sec_of else 0
-
     by_section: dict = {}
     for n in notes:
-        by_section.setdefault(pick(n["page"]), []).append(n)
+        by_section.setdefault(footnote_section(blocks, sec_of, n["page"]), []).append(n)
     last_index = {}
     for i, s in enumerate(sec_of):
         last_index[s] = i
@@ -303,7 +348,14 @@ def place_footnotes(blocks: list, notes: list) -> list:
         out.append(b)
         if last_index[sec_of[i]] == i:
             for n in by_section.pop(sec_of[i], []):
-                out.append({"kind": "footnote", "level": 0, "text": n["text"], "pages": (n["page"], n["page"])})
+                out.append(
+                    {
+                        "kind": "footnote",
+                        "level": 0,
+                        "text": n["text"],
+                        "pages": (n["page"], n["page"]),
+                    }
+                )
     return out
 
 
@@ -324,6 +376,7 @@ def rich_cell_text(doc: dict, cell: dict) -> str:
             out.append(it["text"])
         for ch in it.get("children", []):
             walk(ch)
+
     if cell.get("ref"):
         walk(cell["ref"])
     return " ".join(out)
@@ -345,7 +398,7 @@ def grid(item: dict, doc: dict | None = None):
         r0, r1 = c["start_row_offset_idx"], min(c["end_row_offset_idx"], n_rows)
         c0, c1 = c["start_col_offset_idx"], min(c["end_col_offset_idx"], n_cols)
         raw = c.get("text", "") or (rich_cell_text(doc, c) if doc else "")
-        text = clean_text(raw).replace("|", "/")   # keep "|" for structure only
+        text = clean_text(raw).replace("|", "/")  # keep "|" for structure only
         for r in range(r0, r1):
             for k in range(c0, c1):
                 rows[r][k] = text if k == c0 else None
@@ -388,7 +441,9 @@ def peel(rows, flags):
     return titles, header, rows[i:]
 
 
-VALUE_RE = re.compile(r"^\W*(US\$|\$|\u20ac|\u00a3)?\s*\d")   # starts like a number/amount: '8', '19%', '0.00', 'US$86.2 million'
+VALUE_RE = re.compile(
+    r"^\W*(US\$|\$|\u20ac|\u00a3)?\s*\d"
+)  # starts like a number/amount: '8', '19%', '0.00', 'US$86.2 million'
 
 
 def is_header_row(row, row_flags) -> bool:
@@ -408,8 +463,45 @@ def is_header_row(row, row_flags) -> bool:
     return not any(VALUE_RE.match(x) for x in row if x)
 
 
-OVERLAP_FRAC = 0.2      # cells in different rows whose boxes overlap by more than this (of the smaller box)
-INTRUSION_PT = 12       # a cell reaching this far into the next column's text area
+OVERLAP_FRAC = (
+    0.2  # cells in different rows whose boxes overlap by more than this (of the smaller box)
+)
+INTRUSION_PT = 12  # a cell reaching this far into the next column's text area
+
+
+def overlapping_table_rows(cells: list[dict]) -> list[str]:
+    """Flag the first pair of table cells that overlaps across different rows."""
+    reasons = []
+    ordered = sorted(cells, key=lambda c: c["start_row_offset_idx"])
+    for i, a in enumerate(ordered):
+        for b in ordered[i + 1 :]:
+            if b["start_row_offset_idx"] - a["start_row_offset_idx"] > 3:
+                break  # only neighbouring rows can bleed into each other
+            if b["start_row_offset_idx"] < a["end_row_offset_idx"]:
+                continue  # share a row (or a row span): not a cross-row case
+            A, B = a["bbox"], b["bbox"]
+            ix = min(A["r"], B["r"]) - max(A["l"], B["l"])
+            iy = min(max(A["t"], A["b"]), max(B["t"], B["b"])) - max(
+                min(A["t"], A["b"]), min(B["t"], B["b"])
+            )
+            if ix <= 0 or iy <= 0:
+                continue
+            small = (
+                min(
+                    (A["r"] - A["l"]) * abs(A["t"] - A["b"]),
+                    (B["r"] - B["l"]) * abs(B["t"] - B["b"]),
+                )
+                or 1
+            )
+            if ix * iy / small > OVERLAP_FRAC:
+                reasons.append(
+                    f"cells in different rows overlap: '{a['text'][:30]}' / '{b['text'][:30]}'"
+                )
+                break
+        if reasons:
+            break
+
+    return reasons
 
 
 def table_suspects(item: dict) -> list:
@@ -427,26 +519,7 @@ def table_suspects(item: dict) -> list:
     but check they aren't noisy when you run more PDFs.
     """
     cells = [c for c in item["data"]["table_cells"] if c.get("bbox") and c.get("text", "").strip()]
-    reasons = []
-
-    ordered = sorted(cells, key=lambda c: c["start_row_offset_idx"])
-    for i, a in enumerate(ordered):
-        for b in ordered[i + 1:]:
-            if b["start_row_offset_idx"] - a["start_row_offset_idx"] > 3:
-                break                                        # only neighbouring rows can bleed into each other
-            if b["start_row_offset_idx"] < a["end_row_offset_idx"]:
-                continue                                     # share a row (or a row span): not a cross-row case
-            A, B = a["bbox"], b["bbox"]
-            ix = min(A["r"], B["r"]) - max(A["l"], B["l"])
-            iy = min(max(A["t"], A["b"]), max(B["t"], B["b"])) - max(min(A["t"], A["b"]), min(B["t"], B["b"]))
-            if ix <= 0 or iy <= 0:
-                continue
-            small = min((A["r"] - A["l"]) * abs(A["t"] - A["b"]), (B["r"] - B["l"]) * abs(B["t"] - B["b"])) or 1
-            if ix * iy / small > OVERLAP_FRAC:
-                reasons.append(f"cells in different rows overlap: '{a['text'][:30]}' / '{b['text'][:30]}'")
-                break
-        if reasons:
-            break
+    reasons = overlapping_table_rows(cells)
 
     by_col: dict = {}
     for c in cells:
@@ -455,7 +528,7 @@ def table_suspects(item: dict) -> list:
     for col, items in by_col.items():
         nxt = by_col.get(col + 1, [])
         if len(nxt) < 2:
-            continue                                         # need a few neighbours to know where the next column starts
+            continue  # need a few neighbours to know where the next column starts
         next_left = min(c["bbox"]["l"] for c in nxt)
         for c in items:
             if c["bbox"]["r"] > next_left + INTRUSION_PT:
@@ -493,7 +566,7 @@ def continues(doc: dict, prev: dict, nxt: dict) -> bool:
     top_next = y_range(n_first["bbox"], next_h)[0]
     if not (next_h - top_next < TOP_ZONE_PT and lowest_y(doc, prev) < prev_h * BOTTOM_ZONE_FRAC):
         return False
-    return not is_title_row(grid(nxt)[0][0])   # same test as peel(), so the two can never disagree
+    return not is_title_row(grid(nxt)[0][0])  # same test as peel(), so the two can never disagree
 
 
 def row_line(row) -> str:
@@ -558,7 +631,7 @@ def build_and_render_table(doc: dict, chain: list) -> dict:
         row_pages += [piece["prov"][0]["page_no"]] * len(more)
 
     n_cols = chain[0]["data"]["num_cols"]
-    header = [fill_spans(h, repeat=True) for h in header]    # the REAL header (maybe none)
+    header = [fill_spans(h, repeat=True) for h in header]  # the REAL header (maybe none)
     body = [fill_spans(r, repeat=False) for r in body]
 
     # Markdown only renders a pipe table if it has a header row + |---| separator. Many of these tables
@@ -598,18 +671,19 @@ def build_and_render_table(doc: dict, chain: list) -> dict:
 # --------------------------------------------------------------------------
 # Rebuilding a table row-by-row from the PDF when Docling stopped seeing the table
 # --------------------------------------------------------------------------
-COL_TOL_PT = 3          # a word starting within this much left of a column's left edge still belongs to that column
-REBUILD_MIN_MATCH = 0.9  # rebuilt text must match what Docling read, or the region was wrong -> don't use it
+COL_TOL_PT = (
+    3  # a word starting within this much left of a column's left edge still belongs to that column
+)
+REBUILD_MIN_MATCH = (
+    0.9  # rebuilt text must match what Docling read, or the region was wrong -> don't use it
+)
 REBUILD_MIN_ROWS = 3
 
 
-def pdf_words(pdf_path, page_no: int, region: dict, page_h: float):
-    """
-    Words from the PDF's own text layer that sit inside `region` (a Docling bbox), as a list of lines,
-    each line a list of (left, bottom, right, top, text) sorted left to right. Coordinates are PDF points,
-    origin bottom-left, the same as Docling's. Uses pypdfium2, which Docling already installs.
-    """
+def pdf_chars(pdf_path: str | Path, page_no: int, region: dict, page_h: float) -> list[tuple]:
+    """Read positioned nonspace characters inside the PDF region."""
     import pypdfium2 as pdfium
+
     pdf = pdfium.PdfDocument(str(pdf_path))
     try:
         tp = pdf[page_no - 1].get_textpage()
@@ -619,18 +693,30 @@ def pdf_words(pdf_path, page_no: int, region: dict, page_h: float):
         for i in range(tp.count_chars()):
             ch = tp.get_text_range(i, 1)
             if not ch.strip():
-                space_before = True      # a space has no usable position in the PDF, so remember it by order
+                space_before = (
+                    True  # a space has no usable position in the PDF, so remember it by order
+                )
                 continue
-            l, b, r, t = tp.get_charbox(i)
-            cx, cy = (l + r) / 2, (b + t) / 2
+            char_left, b, r, t = tp.get_charbox(i)
+            cx, cy = (char_left + r) / 2, (b + t) / 2
             if left - 2 <= cx <= right + 2 and bottom - 2 <= cy <= top + 2:
-                chars.append((ch, l, b, r, t, space_before))
+                chars.append((ch, char_left, b, r, t, space_before))
             space_before = False
     finally:
         pdf.close()
+    return chars
+
+
+def pdf_words(pdf_path, page_no: int, region: dict, page_h: float):
+    """
+    Words from the PDF's own text layer that sit inside `region` (a Docling bbox), as a list of lines,
+    each line a list of (left, bottom, right, top, text) sorted left to right. Coordinates are PDF points,
+    origin bottom-left, the same as Docling's. Uses pypdfium2, which Docling already installs.
+    """
+    chars = pdf_chars(pdf_path, page_no, region, page_h)
     if not chars:
         return []
-    heights = sorted(t - b for ch, l, b, r, t, sp in chars if t > b)
+    heights = sorted(t - b for ch, char_left, b, r, t, sp in chars if t > b)
     h = heights[len(heights) // 2] if heights else 10.0
     # group characters into lines by vertical centre (top of the page first)
     lines = []
@@ -638,23 +724,109 @@ def pdf_words(pdf_path, page_no: int, region: dict, page_h: float):
         cy = (c[2] + c[4]) / 2
         if lines and abs(lines[-1]["cy"] - cy) < 0.5 * h:
             lines[-1]["chars"].append(c)
-            lines[-1]["cy"] = (lines[-1]["cy"] * (len(lines[-1]["chars"]) - 1) + cy) / len(lines[-1]["chars"])
+            lines[-1]["cy"] = (lines[-1]["cy"] * (len(lines[-1]["chars"]) - 1) + cy) / len(
+                lines[-1]["chars"]
+            )
         else:
             lines.append({"cy": cy, "chars": [c]})
     out = []
     for ln in lines:
         words, cur, prev_r = [], [], None
-        for ch, l, b, r, t, sp in sorted(ln["chars"], key=lambda c: c[1]):
-            if cur and (sp or (prev_r is not None and l - prev_r > 0.8 * h)):   # a space, or a big gap without one
+        for ch, char_left, b, r, t, sp in sorted(ln["chars"], key=lambda c: c[1]):
+            if cur and (
+                sp or (prev_r is not None and char_left - prev_r > 0.8 * h)
+            ):  # a space, or a big gap without one
                 words.append(cur)
                 cur = []
-            cur.append((ch, l, b, r, t))
+            cur.append((ch, char_left, b, r, t))
             prev_r = r
         if cur:
             words.append(cur)
-        out.append([(min(c[1] for c in w), min(c[2] for c in w), max(c[3] for c in w), max(c[4] for c in w),
-                     "".join(c[0] for c in w)) for w in words])
+        out.append(
+            [
+                (
+                    min(c[1] for c in w),
+                    min(c[2] for c in w),
+                    max(c[3] for c in w),
+                    max(c[4] for c in w),
+                    "".join(c[0] for c in w),
+                )
+                for w in words
+            ]
+        )
     return out
+
+
+def continuation_columns(prev: dict) -> list[float]:
+    """Find every single-column left edge in the preceding table."""
+    # where each column of the previous table starts (left edge of its leftmost text)
+    left_by_col: dict = {}
+    for c in prev["data"]["table_cells"]:
+        if (
+            c.get("bbox")
+            and c.get("text", "").strip()
+            and c["end_col_offset_idx"] - c["start_col_offset_idx"] == 1
+        ):
+            col = c["start_col_offset_idx"]
+            left_by_col[col] = min(left_by_col.get(col, 1e9), c["bbox"]["l"])
+    n_cols = prev["data"]["num_cols"]
+    if n_cols < 2 or len(left_by_col) != n_cols:
+        return []
+    return [left_by_col[k] for k in range(n_cols)]
+
+
+def continuation_rows(lines: list, starts: list[float]) -> tuple[list | None, str | None]:
+    """Group PDF word lines into rows using the previous table column positions."""
+    n_cols = len(starts)
+    rows = []  # each row: [ [words] per column ], plus cell boxes
+    for words in lines:
+        cols = [[] for _ in range(n_cols)]
+        for w in words:
+            k = max((k for k in range(n_cols) if starts[k] <= w[0] + COL_TOL_PT), default=0)
+            cols[k].append(w)
+        if cols[0]:
+            rows.append(cols)
+        elif rows:  # wrapped line: no first-column text -> belongs to the row above
+            for k in range(n_cols):
+                rows[-1][k].extend(cols[k])
+        else:
+            return None, "text starts mid-row (a row wraps over the page break)"
+    if len(rows) < REBUILD_MIN_ROWS:
+        return None, f"only {len(rows)} rows found"
+
+    return rows, None
+
+
+def continuation_cells(rows: list) -> list[dict]:
+    """Build a positioned table cell for each nonempty group of row words."""
+    cells = []
+    for r, cols in enumerate(rows):
+        for k, ws in enumerate(cols):
+            if not ws:
+                continue
+            cells.append(
+                {
+                    "start_row_offset_idx": r,
+                    "end_row_offset_idx": r + 1,
+                    "start_col_offset_idx": k,
+                    "end_col_offset_idx": k + 1,
+                    "text": " ".join(w[4] for w in ws),
+                    "column_header": False,
+                    "bbox": {
+                        "l": min(w[0] for w in ws),
+                        "b": min(w[1] for w in ws),
+                        "r": max(w[2] for w in ws),
+                        "t": max(w[3] for w in ws),
+                        "coord_origin": "BOTTOMLEFT",
+                    },
+                }
+            )
+    return cells
+
+
+def continuation_text_key(value: str) -> str:
+    """Normalize rebuilt and parser text for the agreement check."""
+    return re.sub(r"\W", "", clean_text(value)).lower()
 
 
 def rebuild_continuation(doc: dict, prev: dict, item: dict, text: str, pdf_path):
@@ -672,74 +844,57 @@ def rebuild_continuation(doc: dict, prev: dict, item: dict, text: str, pdf_path)
         return None, "not on the page after the table"
     prev_h = page_size(doc, p_last["page_no"])[1]
     next_h = page_size(doc, prov["page_no"])[1]
-    if not (next_h - y_range(prov["bbox"], next_h)[0] < TOP_ZONE_PT and lowest_y(doc, prev) < prev_h * BOTTOM_ZONE_FRAC):
-        return None, "table does not reach the page bottom / text does not start at the next page top"
+    if not (
+        next_h - y_range(prov["bbox"], next_h)[0] < TOP_ZONE_PT
+        and lowest_y(doc, prev) < prev_h * BOTTOM_ZONE_FRAC
+    ):
+        return (
+            None,
+            "table does not reach the page bottom / text does not start at the next page top",
+        )
 
-    # where each column of the previous table starts (left edge of its leftmost text)
-    left_by_col: dict = {}
-    for c in prev["data"]["table_cells"]:
-        if c.get("bbox") and c.get("text", "").strip() and c["end_col_offset_idx"] - c["start_col_offset_idx"] == 1:
-            col = c["start_col_offset_idx"]
-            left_by_col[col] = min(left_by_col.get(col, 1e9), c["bbox"]["l"])
+    starts = continuation_columns(prev)
     n_cols = prev["data"]["num_cols"]
-    if n_cols < 2 or len(left_by_col) != n_cols:
+    if not starts:
         return None, "could not find every column's position in the table above"
-    starts = [left_by_col[k] for k in range(n_cols)]
 
     try:
         lines = pdf_words(pdf_path, prov["page_no"], prov["bbox"], next_h)
-    except Exception as e:                           # missing pypdfium2, unreadable PDF, ...
+    except Exception as e:  # missing pypdfium2, unreadable PDF, ...
         return None, f"could not read the PDF ({type(e).__name__})"
     if not lines:
         return None, "no text found in the PDF at that spot"
 
-    rows = []                                        # each row: [ [words] per column ], plus cell boxes
-    for words in lines:
-        cols = [[] for _ in range(n_cols)]
-        for w in words:
-            k = max((k for k in range(n_cols) if starts[k] <= w[0] + COL_TOL_PT), default=0)
-            cols[k].append(w)
-        if cols[0]:
-            rows.append(cols)
-        elif rows:                                   # wrapped line: no first-column text -> belongs to the row above
-            for k in range(n_cols):
-                rows[-1][k].extend(cols[k])
-        else:
-            return None, "text starts mid-row (a row wraps over the page break)"
-    if len(rows) < REBUILD_MIN_ROWS:
-        return None, f"only {len(rows)} rows found"
+    rows, reason = continuation_rows(lines, starts)
+    if reason:
+        return None, reason
 
-    cells = []
-    for r, cols in enumerate(rows):
-        for k, ws in enumerate(cols):
-            if not ws:
-                continue
-            cells.append({"start_row_offset_idx": r, "end_row_offset_idx": r + 1,
-                          "start_col_offset_idx": k, "end_col_offset_idx": k + 1,
-                          "text": " ".join(w[4] for w in ws), "column_header": False,
-                          "bbox": {"l": min(w[0] for w in ws), "b": min(w[1] for w in ws),
-                                   "r": max(w[2] for w in ws), "t": max(w[3] for w in ws),
-                                   "coord_origin": "BOTTOMLEFT"}})
+    cells = continuation_cells(rows)
     sparse = sum(1 for cols in rows if not any(cols[1:])) / len(rows)
     if sparse > 0.3:
         return None, "many rows have nothing after the first column"
 
-    norm = lambda s: re.sub(r"\W", "", clean_text(s)).lower()
-    a, b = norm(" ".join(c["text"] for c in cells)), norm(text)
+    a, b = continuation_text_key(" ".join(c["text"] for c in cells)), continuation_text_key(text)
     if difflib.SequenceMatcher(None, a, b, autojunk=False).ratio() < REBUILD_MIN_MATCH:
         return None, "rebuilt text does not match what Docling read"
 
-    item2 = {"label": "table", "footnotes": [], "prov": [{"page_no": prov["page_no"], "bbox": prov["bbox"]}],
-             "data": {"num_rows": len(rows), "num_cols": n_cols, "table_cells": cells}}
+    item2 = {
+        "label": "table",
+        "footnotes": [],
+        "prov": [{"page_no": prov["page_no"], "bbox": prov["bbox"]}],
+        "data": {"num_rows": len(rows), "num_cols": n_cols, "table_cells": cells},
+    }
     return item2, None
 
 
 # --------------------------------------------------------------------------
 # Figures (charts, diagrams, pictures)
 # --------------------------------------------------------------------------
-FIGURE_MIN_AREA = 0.05    # an uncaptioned, label-free picture smaller than 5% of the page is not kept (icons, bullets)
-DECORATION_MIN_PAGES = 3  # an uncaptioned, label-free picture at the same spot on 3+ pages is a logo/background
-FIGURE_SCALE = 2.0        # crop resolution: 2 x 72 dpi = 144 dpi, readable for charts without huge files
+FIGURE_MIN_AREA = 0.05  # an uncaptioned, label-free picture smaller than 5% of the page is not kept (icons, bullets)
+DECORATION_MIN_PAGES = (
+    3  # an uncaptioned, label-free picture at the same spot on 3+ pages is a logo/background
+)
+FIGURE_SCALE = 2.0  # crop resolution: 2 x 72 dpi = 144 dpi, readable for charts without huge files
 FIGURE_PAD_PT = 4
 
 
@@ -750,13 +905,19 @@ def picture_texts(doc: dict, pic: dict, furn: set, stats: Counter | None = None)
     those must not turn a logo into a 'figure'.
     """
     cap_refs = {r["$ref"] for r in pic.get("captions", [])}
-    caption = " ".join(clean_text(resolve(doc, r)[1].get("text", "")) for r in pic.get("captions", [])).strip()
+    caption = " ".join(
+        clean_text(resolve(doc, r)[1].get("text", "")) for r in pic.get("captions", [])
+    ).strip()
     labels = []
 
     def walk(children):
         for ref in children:
             coll, it = resolve(doc, ref)
-            if coll == "texts" and ref["$ref"] not in cap_refs and it.get("content_layer") != "furniture":
+            if (
+                coll == "texts"
+                and ref["$ref"] not in cap_refs
+                and it.get("content_layer") != "furniture"
+            ):
                 t = clean_text(it.get("text", ""))
                 if t and is_missed_furniture(doc, it, furn):
                     if stats is not None:
@@ -765,6 +926,7 @@ def picture_texts(doc: dict, pic: dict, furn: set, stats: Counter | None = None)
                     labels.append(t)
             if coll in ("texts", "groups"):
                 walk(it.get("children", []))
+
     walk(pic.get("children", []))
     return caption, labels
 
@@ -818,9 +980,16 @@ def render_figure(doc: dict, idx: int, pic: dict, deco: set, furn: set, stats: C
     parts = ["Figure: " + (caption or "(no caption)")]
     if labels:
         parts.append("Figure text: " + "; ".join(labels))
-    return {"kind": "figure", "level": 0, "text": "\n".join(parts), "pages": (page, page),
-            "caption": caption or None, "labels": "; ".join(labels), "image": image,
-            "_crop": (page, prov["bbox"])}
+    return {
+        "kind": "figure",
+        "level": 0,
+        "text": "\n".join(parts),
+        "pages": (page, page),
+        "caption": caption or None,
+        "labels": "; ".join(labels),
+        "image": image,
+        "_crop": (page, prov["bbox"]),
+    }
 
 
 def save_figures(doc: dict, blocks: list, pdf_path, fig_dir, stats: Counter) -> None:
@@ -838,8 +1007,10 @@ def save_figures(doc: dict, blocks: list, pdf_path, fig_dir, stats: Counter) -> 
             b["image"] = None
         stats["figures_not_cropped_no_pdf"] += len(figs)
         return
-    import pypdfium2 as pdfium
     from pathlib import Path
+
+    import pypdfium2 as pdfium
+
     fig_dir = Path(fig_dir)
     fig_dir.mkdir(parents=True, exist_ok=True)
     pdf = pdfium.PdfDocument(str(pdf_path))
@@ -849,10 +1020,16 @@ def save_figures(doc: dict, blocks: list, pdf_path, fig_dir, stats: Counter) -> 
             page = pdf[page_no - 1]
             w, h = page.get_size()
             top, bottom = y_range(bb, h)
-            box = (max(bb["l"] - FIGURE_PAD_PT, 0), max(h - top - FIGURE_PAD_PT, 0),
-                   min(bb["r"] + FIGURE_PAD_PT, w), min(h - bottom + FIGURE_PAD_PT, h))
+            box = (
+                max(bb["l"] - FIGURE_PAD_PT, 0),
+                max(h - top - FIGURE_PAD_PT, 0),
+                min(bb["r"] + FIGURE_PAD_PT, w),
+                min(h - bottom + FIGURE_PAD_PT, h),
+            )
             img = page.render(scale=FIGURE_SCALE).to_pil()
-            img.crop(tuple(round(v * FIGURE_SCALE) for v in box)).save(fig_dir / Path(b["image"]).name)
+            img.crop(tuple(round(v * FIGURE_SCALE) for v in box)).save(
+                fig_dir / Path(b["image"]).name
+            )
             stats["figures_saved"] += 1
     finally:
         pdf.close()
@@ -881,6 +1058,41 @@ def looks_like_toc(item: dict) -> bool:
     return ends >= 0.4 * len(filled)
 
 
+def flush_table_chain(doc: dict, chain: list, blocks: list, stats: Counter) -> None:
+    """Render the pending table chain and record its diagnostics."""
+    if chain:
+        t = build_and_render_table(doc, chain)
+        blocks.append({"kind": "table", "level": 0, **t})
+        stats["tables"] += 1
+        stats["tables_merged_across_pages"] += len(chain) - 1
+        if t["suspect"]:
+            stats["suspect_tables"] += 1
+        chain.clear()
+
+
+def rebuild_demoted_heading(
+    doc: dict,
+    chain: list,
+    item: dict,
+    rendered: tuple,
+    pdf_path: str | Path | None,
+    stats: Counter,
+) -> bool:
+    """Append a verified table continuation when a demoted heading contains its rows."""
+    if chain and rendered[0] == "text" and item.get("label") in ("title", "section_header"):
+        # a long heading was just demoted. If it sits right under a table that ran to the bottom of the
+        # previous page, it is probably that table's next rows: try to rebuild them from the PDF.
+        synth, why = rebuild_continuation(doc, chain[-1], item, rendered[2], pdf_path)
+        note = stats["demoted_heading_list"][-1]
+        if synth:
+            chain.append(synth)
+            stats["demoted_headings_rebuilt_as_rows"] += 1
+            note["rebuilt_rows"] = synth["data"]["num_rows"]
+            return True
+        note["not_rebuilt"] = why
+    return False
+
+
 def render_document(doc: dict, stats: Counter, pdf_path=None) -> list:
     """
     Return blocks in reading order: {"kind": "heading"|"text"|"table", "text", "level", "pages": (first, last)}.
@@ -891,56 +1103,45 @@ def render_document(doc: dict, stats: Counter, pdf_path=None) -> list:
     furn = furniture_keys(doc)
     deco = decoration_spots(doc, furn)
 
-    def flush():
-        nonlocal chain
-        if chain:
-            t = build_and_render_table(doc, chain)
-            blocks.append({"kind": "table", "level": 0, **t})
-            stats["tables"] += 1
-            stats["tables_merged_across_pages"] += len(chain) - 1
-            if t["suspect"]:
-                stats["suspect_tables"] += 1
-            chain = []
-
     for kind, item in iter_blocks(doc):
         if kind == "picture":
             fig = render_figure(doc, item[0], item[1], deco, furn, stats)
-            if fig:                       # a kept figure is visible content: it ends a table chain
-                flush()
+            if fig:  # a kept figure is visible content: it ends a table chain
+                flush_table_chain(doc, chain, blocks, stats)
                 blocks.append(fig)
-            continue                      # a skipped logo/icon is invisible, like furniture
+            continue  # a skipped logo/icon is invisible, like furniture
         if kind == "text":
             r = render_text(doc, item, stats, furn)
             if r is None:
                 continue
-            if chain and r[0] == "text" and item.get("label") in ("title", "section_header"):
-                # a long heading was just demoted. If it sits right under a table that ran to the bottom of the
-                # previous page, it is probably that table's next rows: try to rebuild them from the PDF.
-                synth, why = rebuild_continuation(doc, chain[-1], item, r[2], pdf_path)
-                note = stats["demoted_heading_list"][-1]
-                if synth:
-                    chain.append(synth)
-                    stats["demoted_headings_rebuilt_as_rows"] += 1
-                    note["rebuilt_rows"] = synth["data"]["num_rows"]
-                    continue
-                note["not_rebuilt"] = why
-            flush()
+            if rebuild_demoted_heading(doc, chain, item, r, pdf_path, stats):
+                continue
+            flush_table_chain(doc, chain, blocks, stats)
             prov = item.get("prov") or []
             page = prov[0]["page_no"] if prov else None
-            blocks.append({"kind": r[0], "level": r[1], "text": r[2], "pages": (page, prov[-1]["page_no"] if prov else None)})
+            blocks.append(
+                {
+                    "kind": r[0],
+                    "level": r[1],
+                    "text": r[2],
+                    "pages": (page, prov[-1]["page_no"] if prov else None),
+                }
+            )
         else:
-            if item.get("label") == "document_index":     # Docling's own label for a table of contents
+            if (
+                item.get("label") == "document_index"
+            ):  # Docling's own label for a table of contents
                 if looks_like_toc(item):
                     stats["index_tables_dropped"] += 1
-                    flush()
+                    flush_table_chain(doc, chain, blocks, stats)
                     continue
-                stats["index_tables_kept_not_toc"] += 1     # e.g. an acronym list: keep it as a table
+                stats["index_tables_kept_not_toc"] += 1  # e.g. an acronym list: keep it as a table
             if chain and continues(doc, chain[-1], item):
                 chain.append(item)
             else:
-                flush()
+                flush_table_chain(doc, chain, blocks, stats)
                 chain = [item]
-    flush()
+    flush_table_chain(doc, chain, blocks, stats)
     return place_footnotes(blocks, collect_footnotes(doc, stats))
 
 
@@ -948,11 +1149,17 @@ def to_markdown(blocks: list) -> str:
     parts = []
     for b in blocks:
         if b["kind"] == "heading":
-            parts.append("#" * min(b["level"], 6) + " " + b["text"])   # markdown has 6 levels; sections.json keeps the real level
+            parts.append(
+                "#" * min(b["level"], 6) + " " + b["text"]
+            )  # markdown has 6 levels; sections.json keeps the real level
         elif b["kind"] == "footnote":
             parts.append("Footnote: " + b["text"])
         elif b["kind"] == "figure":
-            img = f"![{b['caption'] or 'figure'}]({b['image']})" if b["image"] else "(image not saved: PDF missing)"
+            img = (
+                f"![{b['caption'] or 'figure'}]({b['image']})"
+                if b["image"]
+                else "(image not saved: PDF missing)"
+            )
             first, _, rest = b["text"].partition("\n")
             parts.append("\n\n".join(x for x in (first, img, rest) if x))
         else:
@@ -978,11 +1185,24 @@ def typed_item(b: dict) -> dict:
     if b["kind"] == "footnote":
         return {"type": "footnote", "text": b["text"], "page": b["pages"][0]}
     if b["kind"] == "figure":
-        return {"type": "figure", "caption": b["caption"], "labels": b["labels"], "image": b["image"],
-                "text": b["text"], "pages": list(b["pages"])}
+        return {
+            "type": "figure",
+            "caption": b["caption"],
+            "labels": b["labels"],
+            "image": b["image"],
+            "text": b["text"],
+            "pages": list(b["pages"]),
+        }
     if b["kind"] == "table":
-        item = {"type": "table", "title": b["title"], "header": b["header"], "rows": b["rows"],
-                "row_pages": b["row_pages"], "text": b["text"], "pages": list(b["pages"])}
+        item = {
+            "type": "table",
+            "title": b["title"],
+            "header": b["header"],
+            "rows": b["rows"],
+            "row_pages": b["row_pages"],
+            "text": b["text"],
+            "pages": list(b["pages"]),
+        }
         if b["suspect"]:
             item["suspect"] = b["suspect"]
         return item
@@ -1012,8 +1232,13 @@ def to_sections(blocks: list, stats: Counter) -> list:
             while stack and stack[-1][0] >= b["level"]:
                 stack.pop()
             stack.append((b["level"], b["text"]))
-            cur = {"heading": b["text"], "level": b["level"], "heading_path": [t for _, t in stack],
-                   "content": [], "_pages": list(b["pages"])}
+            cur = {
+                "heading": b["text"],
+                "level": b["level"],
+                "heading_path": [t for _, t in stack],
+                "content": [],
+                "_pages": list(b["pages"]),
+            }
         else:
             cur["content"].append(typed_item(b))
             cur["_pages"].extend(b["pages"])
@@ -1033,7 +1258,10 @@ def pages_without_text(doc: dict) -> list:
     seen = set()
     for coll in ("texts", "tables"):
         for it in doc.get(coll, []):
-            if it.get("content_layer") == "furniture" or it.get("label") in ("page_header", "page_footer"):
+            if it.get("content_layer") == "furniture" or it.get("label") in (
+                "page_header",
+                "page_footer",
+            ):
                 continue
             if coll == "texts" and not it.get("text", "").strip():
                 continue
@@ -1049,11 +1277,18 @@ def process(doc: dict, pdf_path=None, fig_dir=None):
     save_figures(doc, blocks, pdf_path, fig_dir, stats)
     sections = to_sections(blocks, stats)
     out_stats = dict(stats)
-    review = [{"pages": list(b["pages"]), "title": b["title"], "reasons": b["suspect"]}
-              for b in blocks if b["kind"] == "table" and b["suspect"]]
-    out_stats.setdefault("suspect_tables", 0)         # always present, so review.py can tell "none" from "old run"
+    review = [
+        {"pages": list(b["pages"]), "title": b["title"], "reasons": b["suspect"]}
+        for b in blocks
+        if b["kind"] == "table" and b["suspect"]
+    ]
+    out_stats.setdefault(
+        "suspect_tables", 0
+    )  # always present, so review.py can tell "none" from "old run"
     if review:
-        out_stats["suspect_table_list"] = review      # tables a human should check against the PDF
-    out_stats.setdefault("headings_demoted_long", 0)  # always present, like suspect_tables (0 = nothing demoted)
+        out_stats["suspect_table_list"] = review  # tables a human should check against the PDF
+    out_stats.setdefault(
+        "headings_demoted_long", 0
+    )  # always present, like suspect_tables (0 = nothing demoted)
     out_stats["pages_without_text"] = pages_without_text(doc)
     return to_markdown(blocks), sections, out_stats

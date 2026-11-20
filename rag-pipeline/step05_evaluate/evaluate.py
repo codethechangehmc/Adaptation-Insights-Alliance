@@ -18,6 +18,7 @@ From Python (this is what run.py does):
     from step05_evaluate import evaluate
     evaluate.run(run_id="pilot03")
 """
+
 import argparse
 import json
 from pathlib import Path
@@ -47,7 +48,9 @@ def run(run_id=None, init_review=False, labels=LABELS):
     for path in report(run_dir, out_dir):
         print(path)
     if not Path(labels).exists():
-        print(f"No answer key yet ({labels}), so only the pages were written. Create it with --init-review.")
+        print(
+            f"No answer key yet ({labels}), so only the pages were written. Create it with --init-review."
+        )
         return None
     summary = scoring.evaluate(run_dir, Path(labels), out_dir)
     print(json.dumps(summary["groups"], indent=2))
@@ -59,14 +62,17 @@ def run(run_id=None, init_review=False, labels=LABELS):
 def main():
     ap = argparse.ArgumentParser(description="Step 05: compare and score a step 04 run.")
     ap.add_argument("--run-id", help="run folder under data/04_extracted/")
-    ap.add_argument("--init-review", action="store_true",
-                    help="create the answer key from Lolita's test set (never overwrites)")
+    ap.add_argument(
+        "--init-review",
+        action="store_true",
+        help="create the answer key from Lolita's test set (never overwrites)",
+    )
     ap.add_argument("--labels", type=Path, default=LABELS, help="answer key to score against")
     args = ap.parse_args()
     try:
         run(run_id=args.run_id, init_review=args.init_review, labels=args.labels)
     except (ValueError, OSError, KeyError) as error:
-        raise SystemExit(f"Error: {error}")
+        raise SystemExit(f"Error: {error}") from error
 
 
 if __name__ == "__main__":

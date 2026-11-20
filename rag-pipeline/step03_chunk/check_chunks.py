@@ -37,21 +37,24 @@ from paths import CHUNKS, EVAL, GOLD
 
 OUT_PATH = EVAL / "chunk_check.csv"
 
-STOPWORDS = set("""a an the of in on at to for by with from and or as is are was were be been
+STOPWORDS = set(
+    """a an the of in on at to for by with from and or as is are was were be been
 that this these those which who whom its it their there than per into under over not no
-share number total overall project projects programme program""".split())
+share number total overall project projects programme program""".split()
+)
 
 # Gold rows whose values come from a different document than gold_v1_general.csv
 # lists. P003 and P004 are programs covered by the GEF food systems evaluation
 # (P002_doc3); the gold reference took their values from that report.
 PAPER_OVERRIDES = {"P003": "P002_doc3", "P004": "P002_doc3"}
 
-SPACES_RE = re.compile(r"[    ]")   # non-breaking / thin spaces
+SPACES_RE = re.compile(r"[    ]")  # non-breaking / thin spaces
 
 
 # --------------------------------------------------------------------------
 # Value variants: the same number written the ways reports write it
 # --------------------------------------------------------------------------
+
 
 def parse_number(raw):
     """'4612946' -> 4612946.0, '>1000' -> 1000.0, '88.4' -> 88.4, 'N' -> None."""
@@ -84,8 +87,11 @@ def variants(raw):
     else:
         s = repr(v).rstrip("0").rstrip(".")
         exact += [s, s.replace(".", ",")]
-    for scale, words in ((1e9, ("billion", "bn")), (1e6, ("million", "mn", "m")),
-                         (1e3, ("thousand", "k"))):     # '350 thousand ha
+    for scale, words in (
+        (1e9, ("billion", "bn")),
+        (1e6, ("million", "mn", "m")),
+        (1e3, ("thousand", "k")),
+    ):  # '350 thousand ha
         if v >= scale:
             x = v / scale
             forms = {f"{x:.1f}", f"{x:.2f}"}
@@ -111,6 +117,7 @@ def number_pattern(form):
 # Label words
 # --------------------------------------------------------------------------
 
+
 def label_words(metric_stated):
     words = re.findall(r"[a-zA-Z]{3,}", (metric_stated or "").lower())
     return [w for w in dict.fromkeys(words) if w not in STOPWORDS]
@@ -129,6 +136,7 @@ def label_score(words, text):
 # --------------------------------------------------------------------------
 # Loading
 # --------------------------------------------------------------------------
+
 
 def load_csv(path):
     with open(path, newline="", encoding="utf-8-sig") as f:
@@ -164,6 +172,7 @@ def load_chunks(paper_id):
 # Checking one gold value
 # --------------------------------------------------------------------------
 
+
 def on_page(chunk, page):
     p = chunk.get("pages")
     return bool(p) and page is not None and p[0] <= page <= p[1]
@@ -174,44 +183,55 @@ def near_page(chunk, page, slack=1):
     return bool(p) and page is not None and p[0] - slack <= page <= p[1] + slack
 
 
+def number_hits(chunks: list[dict], forms: set[str]) -> list[tuple]:
+    """Find the first matching numeric variant in each searchable chunk."""
+    pats = [number_pattern(f) for f in forms]
+    found = []
+    for c in chunks:
+        m = next((m for p in pats for m in [p.search(c["_search"])] if m), None)
+        if m:
+            found.append((c, m))
+    return found
+
+
 def check_value(row, chunks, label_threshold):
     raw = (row.get("value") or "").strip()
     page = int(row["page"]) if (row.get("page") or "").strip().isdigit() else None
     words = label_words(row.get("metric_stated"))
     exact, rounded = variants(raw)
 
-    res = {"status": "", "match_kind": "", "n_chunks_with_value": 0,
-           "best_chunk": "", "best_chunk_pages": "", "best_chunk_type": "",
-           "label_score": "", "label_together": "", "snippet": ""}
+    res = {
+        "status": "",
+        "match_kind": "",
+        "n_chunks_with_value": 0,
+        "best_chunk": "",
+        "best_chunk_pages": "",
+        "best_chunk_type": "",
+        "label_score": "",
+        "label_together": "",
+        "snippet": "",
+    }
 
     if not exact:
-        res["status"] = "not_checkable"          # e.g. 'N' (a yes/no milestone)
+        res["status"] = "not_checkable"  # e.g. 'N' (a yes/no milestone)
         return res
 
     max_page = max((c["pages"][1] for c in chunks if c.get("pages")), default=0)
 
-    def hits_for(forms):
-        pats = [number_pattern(f) for f in forms]
-        found = []
-        for c in chunks:
-            m = next((m for p in pats for m in [p.search(c["_search"])] if m), None)
-            if m:
-                found.append((c, m))
-        return found
-
-    hits, kind = hits_for(exact), "exact"
+    hits, kind = number_hits(chunks, exact), "exact"
     if not hits:
-        hits, kind = hits_for(rounded), "rounded"
+        hits, kind = number_hits(chunks, rounded), "rounded"
     res["n_chunks_with_value"] = len(hits)
 
     if not hits:
         if page and page > max_page:
-            res["status"] = "page_not_chunked"   # e.g. paper parsed with --pages
+            res["status"] = "page_not_chunked"  # e.g. paper parsed with --pages
         else:
             res["status"] = "not_found"
         return res
 
     res["match_kind"] = kind
+
     # Prefer chunks on the gold page, then near it, then any; among those,
     # the one with the best label score.
     def rank(hit):
@@ -234,21 +254,57 @@ def check_value(row, chunks, label_threshold):
     # also require at least two label words when the label has two or more.
     n_hit = round((ls or 0) * len(words))
     together = ls is not None and ls >= label_threshold and n_hit >= min(2, len(words))
-    res.update({
-        "best_chunk": best["chunk_id"],
-        "best_chunk_pages": "-".join(map(str, best["pages"])) if best.get("pages") else "",
-        "best_chunk_type": best["type"],
-        "label_score": "" if ls is None else f"{ls:.2f}",
-        "label_together": "" if ls is None else ("yes" if together else "no"),
-    })
+    res.update(
+        {
+            "best_chunk": best["chunk_id"],
+            "best_chunk_pages": "-".join(map(str, best["pages"])) if best.get("pages") else "",
+            "best_chunk_type": best["type"],
+            "label_score": "" if ls is None else f"{ls:.2f}",
+            "label_together": "" if ls is None else ("yes" if together else "no"),
+        }
+    )
     s = best["_search"]
-    res["snippet"] = re.sub(r"\s+", " ", s[max(0, m.start() - 80): m.end() + 80]).strip()
+    res["snippet"] = re.sub(r"\s+", " ", s[max(0, m.start() - 80) : m.end() + 80]).strip()
     return res
 
 
 # --------------------------------------------------------------------------
 # Main
 # --------------------------------------------------------------------------
+
+
+def summary_line(rows: list[dict]) -> str:
+    """Summarize chunk recall and page attribution for a group of checked values."""
+    st = defaultdict(int)
+    for x in rows:
+        st[x["status"]] += 1
+    checkable = sum(v for k, v in st.items() if k not in ("not_checkable", "no_chunks"))
+    found = sum(v for k, v in st.items() if k.startswith("found"))
+    onpage = st["found_on_page"]
+    lab = sum(
+        1 for x in rows if x["status"] == "found_on_page" and x.get("label_together") == "yes"
+    )
+    parts = [
+        f"{found}/{checkable} found",
+        f"{onpage} on gold page",
+        f"{lab} with label in same chunk",
+    ]
+    extra = [
+        f"{k} {v}"
+        for k, v in sorted(st.items())
+        if k
+        in (
+            "no_chunks",
+            "page_not_chunked",
+            "not_checkable",
+            "found_near_page",
+            "found_other_page",
+            "found_no_gold_page",
+        )
+        and v
+    ]
+    return ", ".join(parts) + (f"  ({', '.join(extra)})" if extra else "")
+
 
 def run(only=None, gold_dir=GOLD, out=OUT_PATH, label_threshold=0.5):
     """Check that gold values are findable in the chunks. only = list of project codes (None = all)."""
@@ -275,15 +331,35 @@ def run(only=None, gold_dir=GOLD, out=OUT_PATH, label_threshold=0.5):
             res = {"status": "no_chunks"}
         else:
             res = check_value(r, chunks, label_threshold)
-        out_rows.append({
-            "project_code": code, "paper_id": pid,
-            "value": r.get("value", ""), "metric_stated": r.get("metric_stated", ""),
-            "gold_page": r.get("page", ""), "gold_note": r.get("note", ""), **res,
-        })
+        out_rows.append(
+            {
+                "project_code": code,
+                "paper_id": pid,
+                "value": r.get("value", ""),
+                "metric_stated": r.get("metric_stated", ""),
+                "gold_page": r.get("page", ""),
+                "gold_note": r.get("note", ""),
+                **res,
+            }
+        )
 
-    cols = ["project_code", "paper_id", "value", "metric_stated", "gold_page", "status",
-            "match_kind", "n_chunks_with_value", "best_chunk", "best_chunk_pages",
-            "best_chunk_type", "label_score", "label_together", "snippet", "gold_note"]
+    cols = [
+        "project_code",
+        "paper_id",
+        "value",
+        "metric_stated",
+        "gold_page",
+        "status",
+        "match_kind",
+        "n_chunks_with_value",
+        "best_chunk",
+        "best_chunk_pages",
+        "best_chunk_type",
+        "label_score",
+        "label_together",
+        "snippet",
+        "gold_note",
+    ]
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
@@ -295,34 +371,27 @@ def run(only=None, gold_dir=GOLD, out=OUT_PATH, label_threshold=0.5):
     for row in out_rows:
         by_proj[row["project_code"]].append(row)
 
-    def line(rows):
-        st = defaultdict(int)
-        for x in rows:
-            st[x["status"]] += 1
-        checkable = sum(v for k, v in st.items() if k not in ("not_checkable", "no_chunks"))
-        found = sum(v for k, v in st.items() if k.startswith("found"))
-        onpage = st["found_on_page"]
-        lab = sum(1 for x in rows if x["status"] == "found_on_page" and x.get("label_together") == "yes")
-        parts = [f"{found}/{checkable} found", f"{onpage} on gold page",
-                 f"{lab} with label in same chunk"]
-        extra = [f"{k} {v}" for k, v in sorted(st.items())
-                 if k in ("no_chunks", "page_not_chunked", "not_checkable", "found_near_page",
-                          "found_other_page", "found_no_gold_page") and v]
-        return ", ".join(parts) + (f"  ({', '.join(extra)})" if extra else "")
-
     for code in sorted(by_proj):
-        print(f"{code:6} {by_proj[code][0]['paper_id'] or '(no paper id)':14} {line(by_proj[code])}")
-    print(f"\nOVERALL               {line(out_rows)}")
+        print(
+            f"{code:6} {by_proj[code][0]['paper_id'] or '(no paper id)':14} {summary_line(by_proj[code])}"
+        )
+    print(f"\nOVERALL               {summary_line(out_rows)}")
     print(f"Details: {out}  (sort by status; misses are the to-do list)")
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--gold-dir", type=Path, default=GOLD)
     ap.add_argument("--only", nargs="+", metavar="PROJECT_CODE")
     ap.add_argument("--out", type=Path, default=OUT_PATH)
-    ap.add_argument("--label-threshold", type=float, default=0.5,
-                    help="share of label words that must be in the value's chunk")
+    ap.add_argument(
+        "--label-threshold",
+        type=float,
+        default=0.5,
+        help="share of label words that must be in the value's chunk",
+    )
     args = ap.parse_args()
     run(only=args.only, gold_dir=args.gold_dir, out=args.out, label_threshold=args.label_threshold)
 

@@ -4,10 +4,10 @@ import re
 from collections import Counter
 from pathlib import Path
 
+from step04_extract.evidence import check_quote, pdf_pages, quote_pages
 from step04_extract.files import CONFIG, contains, fingerprint, norm, read_json, write_csv
 from step04_extract.rules import content_flags, number
 from step04_extract.tasks import GROUPS
-from step04_extract.evidence import check_quote, pdf_pages, quote_pages
 
 SCHEMA = read_json(CONFIG / "results_schema.json")
 RESULT_COLUMNS = SCHEMA["columns"] + [
@@ -154,7 +154,10 @@ def provenance(
         if contains(stated, pages[p - 1])
         and (
             not wordy
-            or any(len(norm(e["quote"])) >= 8 and contains(e["quote"], pages[p - 1]) for e in fact["evidence"])
+            or any(
+                len(norm(e["quote"])) >= 8 and contains(e["quote"], pages[p - 1])
+                for e in fact["evidence"]
+            )
         )
     ]
 
@@ -207,12 +210,10 @@ def provenance(
     return {
         "page": primary,
         "page_cited": ",".join(map(str, cited)),
-        "page_repaired": bool(relocated_from),   # value not on any cited page; moved to where it is
+        "page_repaired": bool(relocated_from),  # value not on any cited page; moved to where it is
         "also_pages": ",".join(map(str, repeats)),
         "quote": " ... ".join(dict.fromkeys(e["quote"] for e in fact["evidence"] if e["quote"])),
-        "chunk_id": block["id"]
-        if block and job["method"] == "hybrid"
-        else "",
+        "chunk_id": block["id"] if block and job["method"] == "hybrid" else "",
         "source_block_id": block.get("block_id", block.get("id", "")),
         "source_kind": "text" if block.get("type") == "footnote" else block.get("type", ""),
         "section": section_of(document, primary, stated) if primary else "",
@@ -245,7 +246,12 @@ def review_flags(fact: dict, row: dict, source: dict) -> tuple[list[tuple[str, s
     # doesn't exist, is a problem. A real quote on another page, or one too short to check, is a note.
     checks = source["quote_checks"]
     bad_quotes = [c for c in checks if c in ("not_found_needs_review", "invalid_page")]
-    odd_quotes = [c for c in checks if c not in ("exact", "normalized", "joined_passages", "table_cells") and c not in bad_quotes]
+    odd_quotes = [
+        c
+        for c in checks
+        if c not in ("exact", "normalized", "joined_passages", "table_cells")
+        and c not in bad_quotes
+    ]
     problem_checks = [
         (not row["verified"], "not_on_page", "Stated value not found on a cited PDF page"),
         (source["suspect"], "suspect_table", "Matched parser block has suspect-table flags"),
@@ -411,8 +417,12 @@ def export_template(run_dir: Path, projects: list[dict]) -> tuple[list[dict], li
     write_csv(output / "results.csv", rows, RESULT_COLUMNS)
     write_csv(output / "projects.csv", project_rows, PROJECT_COLUMNS)
     for doc_id, document in documents.items():
-        folder = output / Path(document["pdf"]).stem       # per report, named by paper id
-        write_csv(folder / "results.csv", [r for r in rows if r["project_code"] == doc_id], RESULT_COLUMNS)
+        folder = output / Path(document["pdf"]).stem  # per report, named by paper id
+        write_csv(
+            folder / "results.csv",
+            [r for r in rows if r["project_code"] == doc_id],
+            RESULT_COLUMNS,
+        )
         write_csv(
             folder / "projects.csv",
             [r for r in project_rows if r["project_code"] == doc_id],

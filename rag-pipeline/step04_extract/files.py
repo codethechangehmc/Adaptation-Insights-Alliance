@@ -8,9 +8,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-HERE = Path(__file__).resolve().parent     # step04_extract/
-CONFIG = HERE / "config"                   # config.json, manifest.json, results schema + workbook
-MANIFEST = CONFIG / "manifest.json"        # which reports to extract
+HERE = Path(__file__).resolve().parent  # step04_extract/
+CONFIG = HERE / "config"  # config.json, manifest.json, results schema + workbook
+MANIFEST = CONFIG / "manifest.json"  # which reports to extract
 
 
 def read_json(path: Path) -> Any:
